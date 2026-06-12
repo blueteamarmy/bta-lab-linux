@@ -3,19 +3,18 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
-  <meta name="description" content="Blue Team Army — Terminal Linux interativo com desafios CTF. Pratique comandos sem instalar nada." />
-  <meta name="keywords" content="linux, terminal, blue team, comandos, bash, ctf, capture the flag, cibersegurança" />
+  <meta name="description" content="Blue Team Army — Lab 01: Dois Servidores Comprometidos. Terminal Linux + Event Viewer Windows." />
+  <meta name="keywords" content="linux, windows, event viewer, blue team, soc, ctf, cibersegurança" />
   <meta name="author" content="Blue Team Army" />
   <meta name="theme-color" content="#0a0e1a" />
-  <meta property="og:title" content="Blue Team Army — Terminal Linux" />
-  <meta property="og:description" content="Ambiente interativo para aprender comandos Linux com desafios CTF. Sem instalar nada." />
+  <meta property="og:title" content="LAB 01 — Dois Servidores Comprometidos" />
   <meta property="og:type" content="website" />
   <meta name="twitter:card" content="summary" />
-  <title>Blue Team Army — Terminal Linux</title>
+  <title>LAB 01 — Dois Servidores Comprometidos | Blue Team Army</title>
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@400;600;700&family=Rajdhani:wght@400;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@400;600;700&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet" />
 
   <style>
     /* ── Reset & Base ──────────────────────────────────────── */
@@ -135,10 +134,19 @@
       font-weight: 700;
       color: #e8f4ff;
       line-height: 1.2;
-      margin-bottom: 10px;
+      margin-bottom: 6px;
     }
 
     .hero-title span { color: var(--cyan); }
+
+    .hero-subtitle {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 13px;
+      color: var(--blue);
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
 
     .hero-desc {
       font-family: 'Rajdhani', sans-serif;
@@ -341,7 +349,7 @@
     /* ── Flag toast ────────────────────────────────────────── */
     .flag-toast {
       display: none;
-      position: absolute;
+      position: fixed;
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
@@ -350,7 +358,7 @@
       border-radius: 10px;
       padding: 28px 36px;
       text-align: center;
-      z-index: 20;
+      z-index: 100;
       pointer-events: none;
       min-width: 220px;
     }
@@ -443,6 +451,636 @@
       .tb-right { gap: 10px; }
       .flags-display { display: none; }
     }
+
+    /* ══════════════════════════════════════════════════════════
+       ADIÇÕES — ATO 2 / FECHAMENTO
+    ══════════════════════════════════════════════════════════ */
+
+    :root { --orange: #ff9100; --red-vivid: #ff1744; }
+
+    /* ── Act Progress Indicator ─────────────────────────────── */
+    .act-progress {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin: 16px auto 0;
+      flex-wrap: wrap;
+    }
+
+    .act-step {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 5px 14px;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 12px;
+      color: var(--text-faint);
+      transition: border-color 0.3s, color 0.3s, background 0.3s;
+      white-space: nowrap;
+    }
+
+    .act-step--active {
+      border-color: var(--cyan);
+      color: var(--cyan);
+      background: rgba(0,229,255,0.06);
+    }
+
+    .act-step--done {
+      border-color: var(--green);
+      color: var(--green);
+      background: rgba(0,229,160,0.06);
+    }
+
+    .step-num {
+      width: 17px;
+      height: 17px;
+      border-radius: 50%;
+      border: 1.5px solid currentColor;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 9px;
+      font-weight: 700;
+      flex-shrink: 0;
+      line-height: 1;
+    }
+
+    .act-step--done .step-num::after { content: '✓'; }
+    .act-step--done .step-num { font-size: 0; }
+
+    .act-arrow {
+      color: var(--border2);
+      font-size: 14px;
+      line-height: 1;
+    }
+
+    /* ── Generic Act Section ────────────────────────────────── */
+    .act-section {
+      width: 100%;
+      max-width: 860px;
+      opacity: 0;
+      transform: translateY(24px);
+      transition: opacity 0.5s ease, transform 0.5s ease;
+    }
+
+    .act-section.section-visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* ── Act Card Header ────────────────────────────────────── */
+    .act-card-header {
+      background: var(--navy-mid);
+      border: 1px solid var(--border);
+      border-radius: 10px 10px 0 0;
+      padding: 16px 20px;
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+    }
+
+    .act-num {
+      font-family: 'Exo 2', sans-serif;
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--border2);
+      line-height: 1;
+      flex-shrink: 0;
+      min-width: 36px;
+    }
+
+    .act-card-header.active .act-num { color: var(--cyan); }
+
+    .act-head-text { flex: 1; }
+
+    .act-card-title {
+      font-family: 'Exo 2', sans-serif;
+      font-size: 17px;
+      font-weight: 700;
+      color: #e8f4ff;
+      margin-bottom: 4px;
+    }
+
+    .act-card-brief {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 14px;
+      color: var(--text-dim);
+      line-height: 1.5;
+    }
+
+    .act-score-box {
+      text-align: right;
+      flex-shrink: 0;
+    }
+
+    .act-score-label {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 10px;
+      color: var(--text-faint);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 2px;
+    }
+
+    .act-score-val {
+      font-family: 'Exo 2', sans-serif;
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--cyan);
+    }
+
+    /* ── Task Checklist ─────────────────────────────────────── */
+    .task-list {
+      background: #080c18;
+      border-left: 1px solid var(--border);
+      border-right: 1px solid var(--border);
+      padding: 12px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .task-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 12px;
+      color: var(--text-dim);
+      padding: 5px 8px;
+      border-radius: 4px;
+      transition: color 0.3s;
+    }
+
+    .task-item.task-done {
+      color: var(--green);
+    }
+
+    .task-ico {
+      font-size: 13px;
+      flex-shrink: 0;
+      width: 16px;
+      text-align: center;
+    }
+
+    .task-item.task-done .task-ico { color: var(--green); }
+
+    .task-pts-tag {
+      margin-left: auto;
+      font-size: 11px;
+      color: var(--blue);
+      flex-shrink: 0;
+    }
+
+    .task-item.task-done .task-pts-tag { color: var(--green); }
+
+    .task-bonus .task-ico { color: var(--yellow); }
+
+    /* ── Embedded Event Viewer ──────────────────────────────── */
+    .ev-wrap {
+      background: var(--navy);
+      border: 1px solid var(--border);
+      border-top: none;
+      border-radius: 0 0 10px 10px;
+      overflow: hidden;
+    }
+
+    .ev-toolbar {
+      background: var(--navy-mid);
+      border-bottom: 1px solid var(--border);
+      padding: 8px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .ev-filter-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .ev-filter-group label {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 11px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      white-space: nowrap;
+    }
+
+    .ev-filter-group input,
+    .ev-filter-group select {
+      background: #080c18;
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 12px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .ev-filter-group input:focus,
+    .ev-filter-group select:focus { border-color: var(--blue); }
+
+    .ev-filter-group input { width: 88px; }
+    .ev-filter-group select { width: 128px; cursor: pointer; }
+    .ev-msg-input { width: 190px !important; }
+
+    .ev-counter {
+      margin-left: auto;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 12px;
+      color: var(--cyan);
+      white-space: nowrap;
+    }
+
+    .ev-legend {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      padding: 5px 16px;
+      background: #080c18;
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+
+    .leg-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    .leg-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+
+    .leg-red    { background: var(--red-vivid); }
+    .leg-green  { background: var(--green); }
+    .leg-orange { background: var(--orange); }
+
+    .ev-table-wrap {
+      overflow-x: auto;
+      overflow-y: auto;
+      max-height: 360px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border2) var(--navy);
+    }
+
+    .ev-table-wrap::-webkit-scrollbar { width: 6px; height: 6px; }
+    .ev-table-wrap::-webkit-scrollbar-track { background: var(--navy); }
+    .ev-table-wrap::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+    .ev-table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 620px;
+    }
+
+    .ev-table thead th {
+      background: var(--navy-mid);
+      color: var(--text-dim);
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      padding: 8px 12px;
+      text-align: left;
+      border-bottom: 2px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+
+    .ev-table tbody tr {
+      border-bottom: 1px solid rgba(26,42,74,0.6);
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+
+    .ev-table tbody tr:hover td { background: rgba(74,158,255,0.07); }
+
+    .ev-table tbody tr.ev-selected td {
+      background: rgba(74,158,255,0.14) !important;
+    }
+
+    .ev-table td {
+      padding: 7px 12px;
+      vertical-align: middle;
+      font-size: 13px;
+    }
+
+    .ev-col-id  { width: 76px; }
+    .ev-col-ts  { width: 168px; }
+    .ev-col-lvl { width: 108px; }
+    .ev-col-src { width: 230px; }
+
+    .ev-mono {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 12px;
+    }
+
+    .ev-msg-cell {
+      color: var(--text-dim);
+      max-width: 280px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Row highlights */
+    tr.ev-fail { box-shadow: inset 3px 0 0 var(--red-vivid); }
+    tr.ev-fail td { background: rgba(255,23,68,0.07); }
+    tr.ev-fail:hover td { background: rgba(255,23,68,0.13) !important; }
+    tr.ev-fail.ev-selected { box-shadow: inset 3px 0 0 var(--red-vivid); }
+
+    tr.ev-ok { box-shadow: inset 3px 0 0 var(--green); }
+    tr.ev-ok td { background: rgba(0,229,160,0.06); }
+    tr.ev-ok:hover td { background: rgba(0,229,160,0.12) !important; }
+    tr.ev-ok.ev-selected { box-shadow: inset 3px 0 0 var(--green); }
+
+    tr.ev-warn { box-shadow: inset 3px 0 0 var(--orange); }
+    tr.ev-warn td { background: rgba(255,145,0,0.07); }
+    tr.ev-warn:hover td { background: rgba(255,145,0,0.13) !important; }
+    tr.ev-warn.ev-selected { box-shadow: inset 3px 0 0 var(--orange); }
+
+    /* Level badges */
+    .ev-badge {
+      display: inline-block;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px;
+      padding: 2px 7px;
+      border-radius: 3px;
+      font-weight: 600;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+    }
+
+    .ev-badge-information { background: rgba(74,158,255,0.18); color: #8ec8ff; border: 1px solid rgba(74,158,255,0.28); }
+    .ev-badge-warning     { background: rgba(255,145,0,0.18);  color: #ffb347; border: 1px solid rgba(255,145,0,0.28); }
+    .ev-badge-error       { background: rgba(255,23,68,0.18);  color: #ff8099; border: 1px solid rgba(255,23,68,0.28); }
+    .ev-badge-critical    { background: rgba(180,0,40,0.28);   color: #ff4060; border: 1px solid rgba(180,0,40,0.5); }
+
+    .ev-state-cell {
+      text-align: center;
+      padding: 36px 20px;
+      color: var(--text-faint);
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 12px;
+    }
+
+    .ev-error-box {
+      background: rgba(255,23,68,0.12);
+      border: 1px solid rgba(255,23,68,0.3);
+      color: #ff8099;
+      padding: 8px 16px;
+      border-radius: 4px;
+      display: inline-block;
+    }
+
+    /* Detail panel */
+    .ev-detail {
+      background: var(--navy-lite);
+      border-top: 2px solid var(--blue);
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease;
+    }
+
+    .ev-detail--open { max-height: 260px; }
+
+    .ev-dh {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 16px;
+      background: var(--navy-mid);
+      border-bottom: 1px solid var(--border);
+      font-family: 'Rajdhani', sans-serif;
+      font-weight: 700;
+      font-size: 12px;
+      color: var(--cyan);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    .ev-close-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      cursor: pointer;
+      padding: 2px 9px;
+      border-radius: 3px;
+      font-size: 11px;
+      font-family: 'Share Tech Mono', monospace;
+      transition: border-color 0.2s, color 0.2s;
+    }
+    .ev-close-btn:hover { border-color: var(--red); color: var(--red); }
+
+    .ev-db {
+      padding: 10px 16px 14px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 4px 20px;
+      overflow-y: auto;
+      max-height: 200px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border2) var(--navy-lite);
+    }
+
+    .ev-dr {
+      display: flex;
+      gap: 8px;
+      font-size: 12px;
+      align-items: baseline;
+    }
+
+    .ev-dk {
+      font-family: 'Share Tech Mono', monospace;
+      color: var(--text-dim);
+      min-width: 110px;
+      flex-shrink: 0;
+      font-size: 11px;
+    }
+
+    .ev-dv { color: var(--text); word-break: break-all; }
+    .ev-val-hi { color: var(--cyan); }
+
+    /* ── Correlation Table (Closing) ────────────────────────── */
+    .closing-inner {
+      background: var(--navy-mid);
+      border: 1px solid var(--border);
+      border-top: none;
+      border-radius: 0 0 10px 10px;
+      padding: 20px;
+    }
+
+    .corr-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 20px;
+      font-size: 13px;
+    }
+
+    .corr-table th {
+      background: #080c18;
+      color: var(--text-dim);
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      padding: 8px 14px;
+      text-align: left;
+      border-bottom: 2px solid var(--border);
+    }
+
+    .corr-table td {
+      padding: 9px 14px;
+      border-bottom: 1px solid rgba(26,42,74,0.7);
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 12px;
+      color: var(--text-dim);
+      vertical-align: middle;
+    }
+
+    .corr-table td:first-child {
+      color: var(--blue);
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      white-space: nowrap;
+    }
+
+    .corr-match {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 10px;
+      background: rgba(0,229,160,0.15);
+      color: var(--green);
+      border: 1px solid rgba(0,229,160,0.25);
+      padding: 1px 6px;
+      border-radius: 3px;
+      margin-left: 8px;
+      letter-spacing: 0.5px;
+      font-weight: 600;
+      vertical-align: middle;
+    }
+
+    .corr-hi { color: var(--cyan); }
+
+    /* Narrative */
+    .narrative {
+      font-family: 'Exo 2', sans-serif;
+      font-size: 14px;
+      color: var(--text-dim);
+      line-height: 1.7;
+      margin-bottom: 24px;
+      padding: 16px;
+      background: #080c18;
+      border-left: 3px solid var(--blue);
+      border-radius: 0 6px 6px 0;
+    }
+
+    .narrative p { margin-bottom: 10px; }
+    .narrative p:last-child { margin-bottom: 0; }
+    .narrative strong { color: var(--cyan); font-weight: 600; }
+
+    /* Confirm button */
+    .confirm-btn {
+      display: block;
+      width: 100%;
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--cyan);
+      background: rgba(0,229,255,0.06);
+      border: 2px solid var(--cyan);
+      padding: 14px 24px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.2s, box-shadow 0.2s;
+      margin-bottom: 20px;
+    }
+
+    .confirm-btn:hover:not(:disabled) {
+      background: rgba(0,229,255,0.12);
+      box-shadow: 0 0 20px rgba(0,229,255,0.1);
+    }
+
+    .confirm-btn:disabled {
+      cursor: default;
+      color: var(--green);
+      border-color: var(--green);
+      background: rgba(0,229,160,0.06);
+    }
+
+    /* Lab complete banner */
+    .lab-complete-banner {
+      opacity: 0;
+      transform: translateY(12px);
+      transition: opacity 0.5s ease, transform 0.5s ease;
+      background: var(--navy-mid);
+      border: 2px solid var(--cyan);
+      border-radius: 10px;
+      padding: 28px;
+      text-align: center;
+    }
+
+    .lab-complete-banner.banner-visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .lc-icon { font-size: 36px; margin-bottom: 8px; }
+
+    .lc-title {
+      font-family: 'Exo 2', sans-serif;
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--cyan);
+      margin-bottom: 6px;
+    }
+
+    .lc-score {
+      font-family: 'Exo 2', sans-serif;
+      font-size: 40px;
+      font-weight: 700;
+      color: var(--yellow);
+      margin-bottom: 10px;
+      letter-spacing: 2px;
+    }
+
+    .lc-msg {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 15px;
+      color: var(--text-dim);
+      max-width: 480px;
+      margin: 0 auto;
+      line-height: 1.6;
+    }
+
+    @media (max-width: 600px) {
+      .act-card-header { flex-wrap: wrap; }
+      .act-score-box { width: 100%; text-align: left; }
+      .act-num { display: none; }
+      .ev-msg-input { width: 130px !important; }
+    }
   </style>
 </head>
 <body>
@@ -467,13 +1105,31 @@
 
   <!-- Hero -->
   <section class="hero" aria-labelledby="hero-title">
-    <div class="hero-tag">Ambiente Interativo</div>
-    <h1 class="hero-title" id="hero-title">Terminal Linux no <span>navegador</span></h1>
-    <p class="hero-desc">Pratique comandos reais e resolva desafios CTF sem instalar nada. Encontre todas as flags e some sua pontuação.</p>
+    <div class="hero-tag">Módulo 1 · Sistemas Operacionais para Defensores</div>
+    <h1 class="hero-title" id="hero-title">LAB 01 — <span>Dois Servidores Comprometidos</span></h1>
+    <p class="hero-subtitle">Investigue o ataque. Correlacione as evidências.</p>
+
+    <div class="act-progress" role="list" aria-label="Progresso do laboratório">
+      <div class="act-step act-step--active" id="prog-step-1" role="listitem">
+        <span class="step-num" aria-hidden="true">1</span>
+        Ato 1: Terminal Linux
+      </div>
+      <div class="act-arrow" aria-hidden="true">→</div>
+      <div class="act-step" id="prog-step-2" role="listitem">
+        <span class="step-num" aria-hidden="true">2</span>
+        Ato 2: Event Viewer Windows
+      </div>
+      <div class="act-arrow" aria-hidden="true">→</div>
+      <div class="act-step" id="prog-step-3" role="listitem">
+        <span class="step-num" aria-hidden="true">3</span>
+        Fechamento
+      </div>
+    </div>
+
     <div class="stats-bar" aria-label="Status do laboratório">
       <div class="stat-pill"><span class="dot" aria-hidden="true"></span> Sistema Online</div>
-      <div class="stat-pill">3 Flags Escondidas</div>
-      <div class="stat-pill">375 pts Disponíveis</div>
+      <div class="stat-pill">3 Flags no Ato 1</div>
+      <div class="stat-pill">975 pts Disponíveis</div>
     </div>
   </section>
 
@@ -540,12 +1196,179 @@
     </div>
   </main>
 
-  <!-- Victory banner (aparece quando todas as flags são encontradas) -->
+  <!-- Ato 1 completo -->
   <div class="victory" id="victoryBanner" role="status" aria-live="polite">
-    <div class="victory-title">&#x1F3C6; Missão Concluída!</div>
-    <p class="victory-score">Você encontrou todas as flags. Pontuação final: <span id="finalScore">0 pts</span></p>
-    <button class="victory-btn" onclick="resetGame()" type="button">Jogar Novamente</button>
+    <div class="victory-title">&#x2713; Ato 1 Concluído!</div>
+    <p class="victory-score">Servidor Linux investigado. Pontuação: <span id="finalScore">0 pts</span></p>
+    <p class="victory-score" style="font-size:13px;margin-top:4px;margin-bottom:20px;color:var(--cyan);">▼ Ato 2 desbloqueado — role para continuar</p>
+    <button class="victory-btn" onclick="resetGame()" type="button">Reiniciar Ato 1</button>
   </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       ATO 2 — SERVIDOR WINDOWS
+  ═══════════════════════════════════════════════════════════ -->
+  <section class="act-section" id="act2-section" style="display:none" aria-label="Ato 2: Servidor Windows">
+
+    <div class="act-card-header active">
+      <div class="act-num">02</div>
+      <div class="act-head-text">
+        <h2 class="act-card-title">DC01.corp.local — Servidor Windows Comprometido</h2>
+        <p class="act-card-brief">O mesmo IP detectado no servidor Linux agora aparece nos logs do controlador de domínio Windows. Analise os eventos de segurança e identifique o ataque.</p>
+      </div>
+      <div class="act-score-box">
+        <div class="act-score-label">Investigação</div>
+        <div class="act-score-val" id="act2-pts-display">0 pts</div>
+      </div>
+    </div>
+
+    <div class="task-list" aria-label="Objetivos do Ato 2">
+      <div class="task-item" id="task-4625f">
+        <span class="task-ico">☐</span>
+        <span>Filtrar eventos 4625 (Failed Logon)</span>
+        <span class="task-pts-tag">+100 pts</span>
+      </div>
+      <div class="task-item" id="task-4625d">
+        <span class="task-ico">☐</span>
+        <span>Abrir detalhes de um evento 4625</span>
+        <span class="task-pts-tag">+50 pts</span>
+      </div>
+      <div class="task-item" id="task-4624">
+        <span class="task-ico">☐</span>
+        <span>Filtrar eventos 4624 (Successful Logon)</span>
+        <span class="task-pts-tag">+100 pts</span>
+      </div>
+      <div class="task-item" id="task-4720">
+        <span class="task-ico">☐</span>
+        <span>Filtrar eventos 4720 (Account Created)</span>
+        <span class="task-pts-tag">+100 pts</span>
+      </div>
+      <div class="task-item" id="task-ip">
+        <span class="task-ico">☐</span>
+        <span>Identificar IP 10.20.45.113 nos detalhes</span>
+        <span class="task-pts-tag">+50 pts</span>
+      </div>
+      <div class="task-item task-bonus" id="task-bonus">
+        <span class="task-ico">★</span>
+        <span>Bônus: completar toda a investigação</span>
+        <span class="task-pts-tag">+100 pts</span>
+      </div>
+    </div>
+
+    <div class="ev-wrap">
+      <div class="ev-toolbar">
+        <div class="ev-filter-group">
+          <label>Event ID</label>
+          <input type="text" id="ev-eid" placeholder="ex: 4625" />
+        </div>
+        <div class="ev-filter-group">
+          <label>Level</label>
+          <select id="ev-lvl">
+            <option value="All">All</option>
+            <option>Information</option>
+            <option>Warning</option>
+            <option>Error</option>
+            <option>Critical</option>
+          </select>
+        </div>
+        <div class="ev-filter-group">
+          <label>Mensagem</label>
+          <input type="text" id="ev-msg" class="ev-msg-input" placeholder="buscar…" />
+        </div>
+        <span class="ev-counter" id="ev-counter">— / —</span>
+      </div>
+
+      <div class="ev-legend">
+        <span class="leg-item"><span class="leg-dot leg-red"></span>4625 Failed Logon</span>
+        <span class="leg-item"><span class="leg-dot leg-green"></span>4624 Successful Logon</span>
+        <span class="leg-item"><span class="leg-dot leg-orange"></span>4720 Account Created</span>
+      </div>
+
+      <div class="ev-table-wrap">
+        <table class="ev-table">
+          <thead>
+            <tr>
+              <th class="ev-col-id">Event ID</th>
+              <th class="ev-col-ts">Timestamp</th>
+              <th class="ev-col-lvl">Level</th>
+              <th class="ev-col-src">Source</th>
+              <th>Message</th>
+            </tr>
+          </thead>
+          <tbody id="ev-tbody">
+            <tr><td colspan="5" class="ev-state-cell">Aguardando Ato 1…</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="ev-detail" id="ev-detail"></div>
+    </div>
+
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       FECHAMENTO — CORRELAÇÃO DE EVIDÊNCIAS
+  ═══════════════════════════════════════════════════════════ -->
+  <section class="act-section" id="closing-section" style="display:none" aria-label="Fechamento: Correlação de Evidências">
+
+    <div class="act-card-header">
+      <div class="act-num" style="color:var(--green)">✓</div>
+      <div class="act-head-text">
+        <h2 class="act-card-title">Fechamento — Correlação de Evidências</h2>
+        <p class="act-card-brief">Você investigou os dois servidores. Correlacione as evidências e confirme sua conclusão como analista.</p>
+      </div>
+    </div>
+
+    <div class="closing-inner">
+      <table class="corr-table">
+        <thead>
+          <tr>
+            <th>Evidência</th>
+            <th>Linux — Ato 1</th>
+            <th>Windows — Ato 2</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>IP do atacante</td>
+            <td><span class="corr-hi">10.20.45.113</span> <span class="corr-match">✓ MATCH</span></td>
+            <td><span class="corr-hi">10.20.45.113</span></td>
+          </tr>
+          <tr>
+            <td>Horário</td>
+            <td>02:19</td>
+            <td>02:17 – 02:31</td>
+          </tr>
+          <tr>
+            <td>Técnica</td>
+            <td>Cron persistence</td>
+            <td>Criação de conta (EventID 4720)</td>
+          </tr>
+          <tr>
+            <td>Conta criada</td>
+            <td><span class="corr-hi">deployer</span></td>
+            <td><span class="corr-hi">svc_update</span></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="narrative">
+        <p>No servidor Linux, o atacante explorou uma vulnerabilidade para criar uma tarefa cron e manter persistência com a conta <strong>deployer</strong>. O mesmo IP <strong>10.20.45.113</strong> aparece nos logs do controlador de domínio Windows: às 02:17, iniciou um ataque de força bruta contra a conta Administrator e, após obter acesso às 02:17:31, criou a conta de serviço <strong>svc_update</strong> — uma backdoor discreta para manter acesso mesmo após a correção da vulnerabilidade original.</p>
+        <p>Este padrão — exploração inicial, escalada de privilégios e criação de persistência oculta em múltiplos sistemas — é característico da fase pós-intrusão de ameaças persistentes avançadas (APT).</p>
+      </div>
+
+      <button class="confirm-btn" id="confirm-btn" type="button">
+        Confirmar Correlação → +100 pts
+      </button>
+
+      <div class="lab-complete-banner" id="lab-complete" style="display:none">
+        <div class="lc-icon">🏆</div>
+        <h3 class="lc-title">Lab Concluído!</h3>
+        <div class="lc-score" id="lc-score">0 pts</div>
+        <p class="lc-msg">Você identificou um ataque coordenado contra dois servidores e correlacionou as evidências com sucesso. Excelente trabalho, analista.</p>
+      </div>
+    </div>
+
+  </section>
 
   <!-- Footer -->
   <footer class="site-footer">
@@ -555,6 +1378,10 @@
 
 </div><!-- .page -->
 
+<!-- ═══════════════════════════════════════════════════════════
+     SCRIPT 1 — TERMINAL LINUX (original, intacto)
+     Única adição: setTimeout(revealAct2, 1500) em showVictory()
+═══════════════════════════════════════════════════════════ -->
 <script>
   // ── Filesystem ────────────────────────────────────────────
   // Representado como árvore. cwd é array de segmentos partindo de ABSTREE.
@@ -703,6 +1530,7 @@
   function showVictory() {
     document.getElementById('finalScore').textContent = score + ' pts';
     document.getElementById('victoryBanner').classList.add('show');
+    setTimeout(revealAct2, 1500); // desbloqueia Ato 2
   }
 
   function resetGame() {
@@ -908,6 +1736,272 @@
 
   printBoot();
   input.focus();
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════
+     SCRIPT 2 — ATO 2 / FECHAMENTO
+═══════════════════════════════════════════════════════════ -->
+<script>
+(function () {
+  'use strict';
+
+  // ── Estado Ato 2 ──────────────────────────────────────────
+  let act2Score = 0;
+  const act2Done = new Set();
+  let evAllEvents  = [];
+  let evSelectedIdx = null;
+
+  const ACT2_CLOSE_THRESHOLD = 400;
+
+  // ── Utilitários ───────────────────────────────────────────
+  function evEsc(s) {
+    return String(s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function evFmtTs(ts) { return ts.replace('T', ' '); }
+
+  function evRowClass(eid) {
+    if (eid === 4625) return 'ev-fail';
+    if (eid === 4624) return 'ev-ok';
+    if (eid === 4720) return 'ev-warn';
+    return '';
+  }
+
+  // ── Pontuação Ato 2 ───────────────────────────────────────
+  function act2Award(key, pts, msg) {
+    if (act2Done.has(key)) return;
+    act2Done.add(key);
+    act2Score += pts;
+    score     += pts;   // acumula no score global do terminal
+    updateScore();
+    updateAct2Display();
+    showFlagToast(pts, msg);
+    markTask(key);
+
+    // Bônus automático quando todas as 5 tarefas principais estão feitas
+    const mainKeys = ['4625f', '4625d', '4624', '4720', 'ip'];
+    if (mainKeys.every(k => act2Done.has(k)) && !act2Done.has('bonus')) {
+      setTimeout(() => act2Award('bonus', 100, 'Investigação Windows completa!'), 1800);
+    }
+
+    // Revela fechamento ao atingir 400 pts no Ato 2
+    if (act2Score >= ACT2_CLOSE_THRESHOLD && !act2Done.has('closing-revealed')) {
+      act2Done.add('closing-revealed');
+      setTimeout(revealClosingSection, 2200);
+    }
+  }
+
+  function updateAct2Display() {
+    const el = document.getElementById('act2-pts-display');
+    if (el) el.textContent = act2Score + ' pts';
+  }
+
+  function markTask(key) {
+    const el = document.getElementById('task-' + key);
+    if (!el) return;
+    el.classList.add('task-done');
+    const ico = el.querySelector('.task-ico');
+    if (ico) ico.textContent = '☑';
+  }
+
+  // ── Progresso dos Atos ────────────────────────────────────
+  function updateActProgress(step, state) {
+    const el = document.getElementById('prog-step-' + step);
+    if (!el) return;
+    el.classList.remove('act-step--active', 'act-step--done');
+    if (state === 'active') el.classList.add('act-step--active');
+    if (state === 'done')   el.classList.add('act-step--done');
+  }
+
+  // ── Revelar seções ────────────────────────────────────────
+  function revealSection(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.style.display = 'block';
+    el.offsetHeight;                        // force reflow para ativar transition
+    el.classList.add('section-visible');
+    setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'start' }), 120);
+  }
+
+  function revealAct2() {
+    revealSection('act2-section');
+    updateActProgress(1, 'done');
+    updateActProgress(2, 'active');
+    loadEventData();
+  }
+
+  function revealClosingSection() {
+    revealSection('closing-section');
+    updateActProgress(3, 'active');
+  }
+
+  // ── Carregar dados do Event Viewer ────────────────────────
+  function loadEventData() {
+    fetch('events-windows.json')
+      .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(json => {
+        evAllEvents = Array.isArray(json) ? json : (json.events || []);
+        evAllEvents.forEach((ev, i) => { ev._idx = i; });
+        evInitListeners();
+        evRender();
+      })
+      .catch(err => {
+        const tbody = document.getElementById('ev-tbody');
+        if (tbody) {
+          tbody.innerHTML = '<tr><td colspan="5" class="ev-state-cell">' +
+            '<span class="ev-error-box">Erro ao carregar events-windows.json: ' + evEsc(err.message) + '</span>' +
+            '</td></tr>';
+        }
+      });
+  }
+
+  // ── Render tabela ─────────────────────────────────────────
+  function evRender() {
+    const eid = (document.getElementById('ev-eid').value || '').trim();
+    const lvl = document.getElementById('ev-lvl').value;
+    const msg = (document.getElementById('ev-msg').value || '').toLowerCase();
+
+    const filtered = evAllEvents.filter(ev => {
+      if (eid && !String(ev.EventID).includes(eid)) return false;
+      if (lvl !== 'All' && ev.Level !== lvl) return false;
+      if (msg && !ev.Message.toLowerCase().includes(msg)) return false;
+      return true;
+    });
+
+    const counter = document.getElementById('ev-counter');
+    if (counter) counter.textContent = filtered.length + ' eventos / ' + evAllEvents.length + ' total';
+
+    const tbody = document.getElementById('ev-tbody');
+    if (!tbody) return;
+
+    if (!filtered.length) {
+      tbody.innerHTML = '<tr><td colspan="5" class="ev-state-cell">Nenhum evento encontrado.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = filtered.map(ev => {
+      const rc = [evRowClass(ev.EventID), ev._idx === evSelectedIdx ? 'ev-selected' : '']
+        .filter(Boolean).join(' ');
+      return `<tr class="${rc}" data-idx="${ev._idx}">
+        <td class="ev-mono ev-col-id">${ev.EventID}</td>
+        <td class="ev-mono ev-col-ts">${evFmtTs(ev.Timestamp)}</td>
+        <td class="ev-col-lvl"><span class="ev-badge ev-badge-${ev.Level.toLowerCase()}">${ev.Level}</span></td>
+        <td class="ev-col-src">${evEsc(ev.Source)}</td>
+        <td class="ev-msg-cell" title="${evEsc(ev.Message)}">${evEsc(ev.Message)}</td>
+      </tr>`;
+    }).join('');
+
+    tbody.querySelectorAll('tr[data-idx]').forEach(tr => {
+      tr.addEventListener('click', () => {
+        const idx = parseInt(tr.dataset.idx, 10);
+        const ev  = evAllEvents.find(e => e._idx === idx);
+        if (!ev) return;
+
+        if (evSelectedIdx === idx) {
+          evSelectedIdx = null;
+          const panel = document.getElementById('ev-detail');
+          if (panel) panel.classList.remove('ev-detail--open');
+        } else {
+          evSelectedIdx = idx;
+          evRenderDetail(ev);
+          if (ev.EventID === 4625)             act2Award('4625d', 50,  'Detalhes do ataque analisados!');
+          if (ev.IPAddress === '10.20.45.113') act2Award('ip',    50,  'IP do atacante confirmado!');
+        }
+        evRender();
+      });
+    });
+  }
+
+  // ── Render painel de detalhes ─────────────────────────────
+  const EV_KEY_LABELS = {
+    EventID: 'Event ID', Timestamp: 'Timestamp', Level: 'Level',
+    Source: 'Source', Message: 'Message', Computer: 'Computer',
+    User: 'User', Domain: 'Domain', LogonType: 'Logon Type',
+    IPAddress: 'IP Address', AuthPackage: 'Auth Package',
+    ServiceName: 'Service Name', ServiceState: 'Service State',
+    SubjectUser: 'Subject User', NewAccountName: 'New Account',
+    NewAccountDomain: 'New Domain', LogonID: 'Logon ID',
+  };
+  const EV_HI_KEYS = new Set(['EventID', 'IPAddress', 'User', 'NewAccountName', 'SubjectUser']);
+
+  function evRenderDetail(ev) {
+    const panel = document.getElementById('ev-detail');
+    if (!panel) return;
+
+    const rows = Object.entries(ev)
+      .filter(([k]) => k !== '_idx')
+      .map(([k, v]) => {
+        const label = EV_KEY_LABELS[k] || k;
+        const hi    = EV_HI_KEYS.has(k) ? ' ev-val-hi' : '';
+        return `<div class="ev-dr">
+          <span class="ev-dk">${evEsc(label)}</span>
+          <span class="ev-dv${hi}">${evEsc(String(v))}</span>
+        </div>`;
+      }).join('');
+
+    panel.innerHTML = `
+      <div class="ev-dh">
+        <span>Detalhes — EventID ${ev.EventID}</span>
+        <button class="ev-close-btn" id="ev-close-btn">✕ Fechar</button>
+      </div>
+      <div class="ev-db">${rows}</div>`;
+
+    panel.classList.add('ev-detail--open');
+
+    document.getElementById('ev-close-btn').addEventListener('click', () => {
+      panel.classList.remove('ev-detail--open');
+      evSelectedIdx = null;
+      evRender();
+    });
+  }
+
+  // ── Listeners dos filtros ─────────────────────────────────
+  function evInitListeners() {
+    const eidInput = document.getElementById('ev-eid');
+    const lvlSel   = document.getElementById('ev-lvl');
+    const msgInput = document.getElementById('ev-msg');
+
+    eidInput.addEventListener('input', () => {
+      const v = eidInput.value.trim();
+      if (v === '4625') act2Award('4625f', 100, 'Brute force identificado!');
+      if (v === '4624') act2Award('4624',  100, 'Acesso bem-sucedido localizado!');
+      if (v === '4720') act2Award('4720',  100, 'Conta backdoor encontrada!');
+      evRender();
+    });
+
+    lvlSel.addEventListener('change', evRender);
+    msgInput.addEventListener('input', evRender);
+  }
+
+  // ── Botão Confirmar Correlação ────────────────────────────
+  document.getElementById('confirm-btn').addEventListener('click', function () {
+    if (this.disabled) return;
+    this.disabled = true;
+    this.textContent = '✓ Correlação Confirmada!';
+
+    score += 100;
+    updateScore();
+    showFlagToast(100, 'Lab concluído! Investigação completa!');
+
+    const banner  = document.getElementById('lab-complete');
+    const lcScore = document.getElementById('lc-score');
+    if (banner && lcScore) {
+      lcScore.textContent = score + ' pts';
+      banner.style.display = 'block';
+      banner.offsetHeight;
+      banner.classList.add('banner-visible');
+    }
+
+    updateActProgress(3, 'done');
+    setTimeout(() => banner && banner.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 300);
+  });
+
+  // ── Expor revealAct2 globalmente (chamado por showVictory) ─
+  window.revealAct2 = revealAct2;
+
+})();
 </script>
 
 </body>
