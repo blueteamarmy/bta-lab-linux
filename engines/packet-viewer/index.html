@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BTA — Packet Viewer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&family=Exo+2:wght@400;600&family=Share+Tech+Mono&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:     #060a12;
+      --bg2:    #090e1a;
+      --bg3:    #0d1525;
+      --card:   #0f1c30;
+      --blue:   #1e90ff;
+      --cyan:   #00e5ff;
+      --green:  #00e676;
+      --orange: #ff9100;
+      --red:    #ff1744;
+      --yellow: #febc2e;
+      --purple: #9c27b0;
+      --white:  #e8f0fe;
+      --dim:    #8eaac8;
+      --border: #1a2a4a;
+    }
+
+    html, body { height: 100%; }
+
+    body {
+      background: var(--bg);
+      color: var(--white);
+      font-family: 'Exo 2', sans-serif;
+      font-size: 13px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Header ──────────────────────────────────────────── */
+    header {
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+
+    .header-icon {
+      width: 30px; height: 30px;
+      background: linear-gradient(135deg, var(--blue), var(--cyan));
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px; flex-shrink: 0;
+    }
+
+    .header-title {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 18px; font-weight: 700;
+      color: var(--white); letter-spacing: 0.5px;
+    }
+
+    .header-sub {
+      font-size: 11px; color: var(--dim);
+      font-family: 'Share Tech Mono', monospace;
+    }
+
+    /* ── Toolbar ─────────────────────────────────────────── */
+    .toolbar {
+      background: var(--bg3);
+      border-bottom: 1px solid var(--border);
+      padding: 8px 16px 6px;
+      flex-shrink: 0;
+    }
+
+    .filter-row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .filter-label {
+      color: var(--dim); font-size: 11px;
+      font-family: 'Share Tech Mono', monospace;
+      flex-shrink: 0;
+    }
+
+    #filter-input {
+      flex: 1;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 5px 10px;
+      color: var(--white);
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 12px;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    #filter-input:focus { border-color: var(--blue); box-shadow: 0 0 0 2px rgba(30,144,255,.2); }
+    #filter-input.valid  { border-color: var(--cyan); box-shadow: 0 0 0 2px rgba(0,229,255,.15); }
+    #filter-input.invalid { border-color: var(--red); box-shadow: 0 0 0 2px rgba(255,23,68,.2); }
+
+    .tb-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--dim);
+      padding: 5px 12px;
+      font-family: 'Exo 2', sans-serif;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+
+    .tb-btn:hover { border-color: var(--blue); color: var(--blue); }
+    .tb-btn.primary { border-color: var(--cyan); color: var(--cyan); }
+    .tb-btn.primary:hover { background: rgba(0,229,255,.1); }
+
+    .tb-sep { width: 1px; background: var(--border); height: 22px; }
+
+    #proto-drop {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--white);
+      padding: 5px 8px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 12px;
+      cursor: pointer;
+      outline: none;
+    }
+
+    #counter {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 11px;
+      color: var(--dim);
+      white-space: nowrap;
+    }
+
+    .hints-row {
+      display: flex;
+      gap: 5px;
+      flex-wrap: wrap;
+      margin-top: 6px;
+      align-items: center;
+    }
+
+    .hint-label { color: var(--dim); font-size: 10px; flex-shrink: 0; }
+
+    .hint-chip {
+      background: rgba(30,144,255,.08);
+      border: 1px solid rgba(30,144,255,.2);
+      border-radius: 3px;
+      color: var(--blue);
+      padding: 2px 7px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .hint-chip:hover { background: rgba(30,144,255,.18); border-color: var(--blue); }
+
+    /* ── Packet Table ─────────────────────────────────────── */
+    .table-wrap {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: auto;
+    }
+
+    .table-wrap::-webkit-scrollbar { width: 6px; height: 6px; }
+    .table-wrap::-webkit-scrollbar-track { background: var(--bg2); }
+    .table-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 720px;
+    }
+
+    thead { position: sticky; top: 0; z-index: 2; }
+
+    thead th {
+      background: var(--bg3);
+      border-bottom: 1px solid var(--border);
+      padding: 6px 10px;
+      text-align: left;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 11px;
+      color: var(--cyan);
+      font-weight: normal;
+      white-space: nowrap;
+      user-select: none;
+    }
+
+    tbody tr {
+      border-bottom: 1px solid rgba(26,42,74,.5);
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+
+    tbody tr:hover { background: rgba(30,144,255,.07) !important; }
+    tbody tr.selected { background: rgba(0,229,255,.12) !important; outline: 1px solid rgba(0,229,255,.3); outline-offset: -1px; }
+
+    td {
+      padding: 4px 10px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    td.info-cell { white-space: nowrap; max-width: 400px; color: var(--dim); font-size: 12px; }
+    .mono { font-family: 'Share Tech Mono', monospace; font-size: 11px; }
+    .dim { color: var(--dim); }
+
+    /* Row color coding */
+    tr.row-icmp  { background: rgba(254,188,46,.06); }
+    tr.row-syn   { background: rgba(255,23,68,.06); }
+    tr.row-rst   { background: rgba(255,65,54,.1); }
+    tr.row-http  { background: rgba(30,144,255,.07); }
+    tr.row-tcp   { background: rgba(74,158,255,.03); }
+
+    /* Protocol badges */
+    .proto-badge {
+      display: inline-block;
+      padding: 1px 7px;
+      border-radius: 3px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 11px;
+      font-weight: bold;
+    }
+
+    .proto-icmp { background: rgba(254,188,46,.18); color: #febc2e; border: 1px solid rgba(254,188,46,.3); }
+    .proto-tcp  { background: rgba(255,23,68,.18);  color: #ff6b7a; border: 1px solid rgba(255,23,68,.3); }
+    .proto-http { background: rgba(30,144,255,.2);  color: #5eb5ff; border: 1px solid rgba(30,144,255,.35); }
+    .proto-dns  { background: rgba(156,39,176,.2);  color: #ce93d8; border: 1px solid rgba(156,39,176,.35); }
+    .proto-udp  { background: rgba(0,230,118,.15);  color: #00e676; border: 1px solid rgba(0,230,118,.3); }
+
+    /* ── Detail Panel ─────────────────────────────────────── */
+    #detail-pane {
+      flex-shrink: 0;
+      height: 290px;
+      display: flex;
+      flex-direction: column;
+      border-top: 2px solid var(--blue);
+      background: var(--bg2);
+    }
+
+    .detail-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 12px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg3);
+      flex-shrink: 0;
+    }
+
+    .detail-header-icon { color: var(--cyan); font-size: 13px; }
+
+    #detail-title {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 11px;
+      color: var(--cyan);
+      flex: 1;
+    }
+
+    .detail-body {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* Tree pane */
+    .tree-pane {
+      overflow-y: auto;
+      overflow-x: hidden;
+      border-right: 1px solid var(--border);
+      padding: 4px 0;
+    }
+
+    .tree-pane::-webkit-scrollbar { width: 4px; }
+    .tree-pane::-webkit-scrollbar-thumb { background: var(--border); }
+
+    details { }
+
+    .ts {
+      list-style: none;
+      padding: 3px 10px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 11px;
+      color: var(--cyan);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      user-select: none;
+    }
+
+    .ts::before { content: '▶'; font-size: 8px; color: var(--dim); transition: transform .15s; display: inline-block; width: 10px; }
+    details[open] > .ts::before { transform: rotate(90deg); }
+
+    .tf {
+      display: flex;
+      gap: 6px;
+      padding: 1px 10px 1px 22px;
+    }
+
+    .tk {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px;
+      color: var(--dim);
+      min-width: 130px;
+      flex-shrink: 0;
+    }
+
+    .tv {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px;
+      color: var(--white);
+      word-break: break-all;
+    }
+
+    /* Hex pane */
+    .hex-pane {
+      overflow: auto;
+      padding: 6px 12px;
+      background: var(--bg);
+    }
+
+    .hex-pane::-webkit-scrollbar { width: 4px; height: 4px; }
+    .hex-pane::-webkit-scrollbar-thumb { background: var(--border); }
+
+    #hex-content {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10.5px;
+      line-height: 1.7;
+      color: var(--dim);
+      white-space: pre;
+    }
+
+    /* highlight byte sections */
+    .hex-offset { color: #3a5a8a; }
+    .hex-eth    { color: #6a9f6a; }
+    .hex-ip     { color: #9f9f3a; }
+    .hex-proto  { color: #7a6ab0; }
+    .hex-data   { color: var(--dim); }
+
+    /* ── No-selection placeholder ─────────────────────────── */
+    .no-select {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--dim);
+      font-size: 12px;
+      font-family: 'Share Tech Mono', monospace;
+      gap: 6px;
+    }
+
+    @media (max-width: 680px) {
+      .detail-body { grid-template-columns: 1fr; }
+      .hex-pane { display: none; }
+      #detail-pane { height: 220px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-icon">📡</div>
+  <div>
+    <div class="header-title">Packet Viewer</div>
+    <div class="header-sub" id="capture-meta">Carregando…</div>
+  </div>
+</header>
+
+<div class="toolbar">
+  <div class="filter-row">
+    <span class="filter-label">🔬 Filtro:</span>
+    <input id="filter-input" type="text"
+      placeholder="ip.addr == 10.20.45.113   |   tcp.port == 445   |   icmp   |   http" />
+    <button class="tb-btn primary" id="apply-btn">Aplicar</button>
+    <button class="tb-btn" id="clear-btn">Limpar</button>
+    <div class="tb-sep"></div>
+    <span class="filter-label">Proto:</span>
+    <select id="proto-drop"></select>
+    <div class="tb-sep"></div>
+    <span id="counter"></span>
+  </div>
+  <div class="hints-row">
+    <span class="hint-label">Filtros rápidos:</span>
+    <button class="hint-chip" data-filter="icmp">icmp</button>
+    <button class="hint-chip" data-filter="tcp">tcp</button>
+    <button class="hint-chip" data-filter="http">http</button>
+    <button class="hint-chip" data-filter="ip.addr == 10.20.45.113">ip.addr == 10.20.45.113</button>
+    <button class="hint-chip" data-filter="ip.dst == 192.168.10.7">ip.dst == 192.168.10.7</button>
+    <button class="hint-chip" data-filter="tcp.port == 445">tcp.port == 445</button>
+    <button class="hint-chip" data-filter="tcp.flags.syn == 1">tcp.flags.syn == 1</button>
+    <button class="hint-chip" data-filter="tcp.port == 8080">tcp.port == 8080</button>
+  </div>
+</div>
+
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th style="width:40px">No.</th>
+        <th style="width:90px">Hora</th>
+        <th style="width:130px">Origem</th>
+        <th style="width:130px">Destino</th>
+        <th style="width:72px">Protocolo</th>
+        <th style="width:50px">Tam.</th>
+        <th>Informações</th>
+      </tr>
+    </thead>
+    <tbody id="pkt-tbody"></tbody>
+  </table>
+</div>
+
+<div id="detail-pane" hidden>
+  <div class="detail-header">
+    <span class="detail-header-icon">🔎</span>
+    <span id="detail-title"></span>
+  </div>
+  <div class="detail-body">
+    <div class="tree-pane" id="tree-content"></div>
+    <div class="hex-pane"><pre id="hex-content"></pre></div>
+  </div>
+</div>
+
+<script>
+(async () => {
+  /* ── Load data ─────────────────────────────────────────── */
+  const params  = new URLSearchParams(location.search);
+  const dataUrl = params.get('data') || 'packets.json';
+  let allPackets;
+  try {
+    const res  = await fetch(dataUrl);
+    const json = await res.json();
+    allPackets = json.packets;
+    const m = json.meta || {};
+    document.getElementById('capture-meta').textContent =
+      `${m.capture || dataUrl}  ·  Interface: ${m.interface || 'eth0'}  ·  ${m.start || ''}  ·  ${m.total || allPackets.length} pacotes`;
+  } catch (e) {
+    document.getElementById('capture-meta').textContent = 'Erro ao carregar captura';
+    console.error(e);
+    return;
+  }
+
+  /* ── DOM refs ──────────────────────────────────────────── */
+  const tbody       = document.getElementById('pkt-tbody');
+  const counter     = document.getElementById('counter');
+  const filterInput = document.getElementById('filter-input');
+  const protoDrop   = document.getElementById('proto-drop');
+  const detailPane  = document.getElementById('detail-pane');
+  const treeContent = document.getElementById('tree-content');
+  const hexContent  = document.getElementById('hex-content');
+  const detailTitle = document.getElementById('detail-title');
+
+  let textFilter  = null;
+  let protoFilter = '';
+  let selected    = null;
+
+  /* ── Proto dropdown ────────────────────────────────────── */
+  const protos = ['All', ...new Set(allPackets.map(p => p.proto))];
+  protos.forEach(p => {
+    const opt = document.createElement('option');
+    opt.value = p === 'All' ? '' : p;
+    opt.textContent = p;
+    protoDrop.appendChild(opt);
+  });
+
+  /* ── Render table ──────────────────────────────────────── */
+  function render() {
+    const filtered = allPackets.filter(pkt => {
+      return (!textFilter || textFilter(pkt)) && (!protoFilter || pkt.proto === protoFilter);
+    });
+
+    counter.textContent = `${filtered.length} de ${allPackets.length} pacotes`;
+    tbody.innerHTML = '';
+
+    filtered.forEach(pkt => {
+      const tr = document.createElement('tr');
+      tr.className = rowClass(pkt);
+      tr.dataset.no = pkt.no;
+      if (selected && selected.no === pkt.no) tr.classList.add('selected');
+
+      tr.innerHTML =
+        `<td class="mono dim">${pkt.no}</td>` +
+        `<td class="mono">${pkt.time}</td>` +
+        `<td class="mono">${pkt.src}</td>` +
+        `<td class="mono">${pkt.dst}</td>` +
+        `<td><span class="proto-badge proto-${pkt.proto.toLowerCase()}">${pkt.proto}</span></td>` +
+        `<td class="mono dim">${pkt.len}</td>` +
+        `<td class="info-cell">${esc(pkt.info)}</td>`;
+
+      tr.addEventListener('click', () => selectPkt(pkt, tr));
+      tbody.appendChild(tr);
+    });
+  }
+
+  /* ── Select packet → detail panel ─────────────────────── */
+  function selectPkt(pkt, tr) {
+    selected = pkt;
+    tbody.querySelectorAll('tr.selected').forEach(r => r.classList.remove('selected'));
+    tr.classList.add('selected');
+
+    const t = pkt.transport;
+    const srcPort = t.src_port ? `:${t.src_port}` : '';
+    const dstPort = t.dst_port ? `:${t.dst_port}` : '';
+    detailTitle.textContent =
+      `Pacote ${pkt.no}  ·  ${pkt.proto}  ·  ${pkt.src}${srcPort} → ${pkt.dst}${dstPort}  ·  ${pkt.len} bytes`;
+
+    detailPane.hidden = false;
+    treeContent.innerHTML = renderTree(pkt);
+    hexContent.textContent = formatHexDump(buildPacketBytes(pkt));
+  }
+
+  /* ── Filter ────────────────────────────────────────────── */
+  function applyFilter() {
+    const expr = filterInput.value.trim();
+    if (!expr) {
+      textFilter = null;
+      filterInput.className = '';
+    } else {
+      const fn = parseFilter(expr);
+      if (fn === null) {
+        filterInput.className = 'invalid';
+        return;
+      }
+      textFilter = fn;
+      filterInput.className = 'valid';
+    }
+    render();
+  }
+
+  function clearFilter() {
+    filterInput.value = '';
+    filterInput.className = '';
+    textFilter = null;
+    protoFilter = '';
+    protoDrop.value = '';
+    render();
+  }
+
+  document.getElementById('apply-btn').addEventListener('click', applyFilter);
+  document.getElementById('clear-btn').addEventListener('click', clearFilter);
+  filterInput.addEventListener('keydown', e => { if (e.key === 'Enter') applyFilter(); });
+  protoDrop.addEventListener('change', () => { protoFilter = protoDrop.value; render(); });
+
+  document.querySelectorAll('.hint-chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      filterInput.value = btn.dataset.filter;
+      applyFilter();
+    });
+  });
+
+  /* ── parseFilter ───────────────────────────────────────── */
+  function parseFilter(raw) {
+    const lo = raw.trim().toLowerCase();
+    if (!lo) return () => true;
+
+    if (lo === 'icmp') return p => p.proto === 'ICMP';
+    if (lo === 'http') return p => p.proto === 'HTTP';
+    if (lo === 'dns')  return p => p.proto === 'DNS';
+    if (lo === 'udp')  return p => p.proto === 'UDP' || p.proto === 'DNS';
+    if (lo === 'tcp')  return p => p.proto === 'TCP' || p.proto === 'HTTP';
+    if (lo === 'arp')  return p => p.proto === 'ARP';
+
+    const m1 = /^ip\.addr\s*==\s*(\S+)$/.exec(lo);
+    if (m1) { const ip = m1[1]; return p => p.src === ip || p.dst === ip; }
+
+    const m2 = /^ip\.src\s*==\s*(\S+)$/.exec(lo);
+    if (m2) { const ip = m2[1]; return p => p.src === ip; }
+
+    const m3 = /^ip\.dst\s*==\s*(\S+)$/.exec(lo);
+    if (m3) { const ip = m3[1]; return p => p.dst === ip; }
+
+    const m4 = /^(?:tcp|udp)\.port\s*==\s*(\d+)$/.exec(lo);
+    if (m4) {
+      const n = parseInt(m4[1]);
+      return p => p.transport.src_port === n || p.transport.dst_port === n;
+    }
+
+    if (/^tcp\.flags\.syn\s*==\s*1$/.test(lo))
+      return p => p.proto === 'TCP' && (p.transport.flags || '').includes('SYN');
+
+    if (/^tcp\.flags\.rst\s*==\s*1$/.test(lo))
+      return p => (p.transport.flags || '').includes('RST');
+
+    /* free text */
+    return p =>
+      p.src.includes(lo) || p.dst.includes(lo) ||
+      p.proto.toLowerCase().includes(lo) ||
+      p.info.toLowerCase().includes(lo);
+  }
+
+  /* ── renderTree ────────────────────────────────────────── */
+  function renderTree(pkt) {
+    const t = pkt.transport;
+    const parts = [];
+
+    parts.push(section('Informações do Frame', [
+      ['Número',           pkt.no],
+      ['Timestamp',        `2024-11-08 ${pkt.time}`],
+      ['Comprimento',      `${pkt.len} bytes on wire`],
+      ['Interface',        'eth0'],
+    ]));
+
+    parts.push(section('Ethernet II', [
+      ['Destino',  pkt.eth_dst],
+      ['Origem',   pkt.eth_src],
+      ['Tipo',     'IPv4 (0x0800)'],
+    ]));
+
+    const protoIds = { ICMP:'ICMP (1)', TCP:'TCP (6)', HTTP:'TCP (6)', UDP:'UDP (17)', DNS:'UDP (17)' };
+    parts.push(section('Internet Protocol v4', [
+      ['Versão',                    '4'],
+      ['Comprimento do Cabeçalho',  '20 bytes'],
+      ['Comprimento Total',         pkt.len - 14],
+      ['TTL',                       pkt.ip_ttl],
+      ['Protocolo',                 protoIds[pkt.proto] || pkt.proto],
+      ['Origem',                    pkt.src],
+      ['Destino',                   pkt.dst],
+    ]));
+
+    if (pkt.proto === 'ICMP') {
+      const typeName = t.icmp_type === 8 ? 'Echo (ping) request' : t.icmp_type === 0 ? 'Echo (ping) reply' : t.icmp_type;
+      parts.push(section('Internet Control Message Protocol', [
+        ['Tipo',                `${t.icmp_type} (${typeName})`],
+        ['Código',              `${t.icmp_code} (No error)`],
+        ['Identificador (BE)',  t.id],
+        ['Número de Sequência', t.seq],
+      ]));
+
+    } else if (pkt.proto === 'TCP') {
+      parts.push(section('Transmission Control Protocol', [
+        ['Porta de Origem',  t.src_port],
+        ['Porta de Destino', t.dst_port],
+        ['Flags',            t.flags],
+        ['Sequência',        t.seq],
+        ['Confirmação',      t.ack],
+        ['Janela',           t.win != null ? t.win : 65535],
+      ]));
+
+    } else if (pkt.proto === 'HTTP') {
+      const fields = [
+        ['Porta de Origem',  t.src_port],
+        ['Porta de Destino', t.dst_port],
+        ['Flags TCP',        t.flags],
+        ['Método',           t.method],
+        ['URI',              t.uri],
+        ['Host',             t.host],
+      ];
+      if (t.user_agent)    fields.push(['User-Agent',     t.user_agent]);
+      if (t.content_type)  fields.push(['Content-Type',   t.content_type]);
+      if (t.content_length != null) fields.push(['Content-Length', t.content_length]);
+      parts.push(section('Hypertext Transfer Protocol', fields));
+    }
+
+    return parts.join('');
+  }
+
+  function section(label, fields) {
+    return `<details open><summary class="ts">${esc(label)}</summary>` +
+      fields.map(([k, v]) =>
+        `<div class="tf"><span class="tk">${esc(String(k))}</span><span class="tv">${esc(String(v))}</span></div>`
+      ).join('') +
+      `</details>`;
+  }
+
+  /* ── buildPacketBytes ──────────────────────────────────── */
+  function buildPacketBytes(pkt) {
+    const b = [];
+    const mac = m => m.split(':').map(h => parseInt(h, 16));
+    const ip4 = a => a.split('.').map(Number);
+    const u16 = n => [(n >> 8) & 0xff, n & 0xff];
+    const protoNum = { ICMP: 1, TCP: 6, HTTP: 6, UDP: 17, DNS: 17 }[pkt.proto] || 0;
+
+    /* Ethernet (14 bytes) */
+    b.push(...mac(pkt.eth_dst), ...mac(pkt.eth_src), 0x08, 0x00);
+
+    /* IP header (20 bytes) */
+    const ipLen = pkt.len - 14;
+    b.push(
+      0x45, 0x00, ...u16(ipLen),
+      0x1a, (0x40 + pkt.no) & 0xff, 0x40, 0x00,
+      pkt.ip_ttl, protoNum, 0x00, 0x00,
+      ...ip4(pkt.src), ...ip4(pkt.dst)
+    );
+
+    const t = pkt.transport;
+
+    if (pkt.proto === 'ICMP') {
+      b.push(t.icmp_type, t.icmp_code, 0x4a, 0x2e, 0x00, 0x01, ...u16(t.seq));
+      const fill = 'abcdefghijklmnopqrstuvwxyz012345';
+      while (b.length < pkt.len)
+        b.push(fill.charCodeAt((b.length - 42) % fill.length));
+
+    } else if (pkt.proto === 'TCP' || pkt.proto === 'HTTP') {
+      const fByte = { 'SYN': 0x02, 'RST, ACK': 0x14, 'PSH, ACK': 0x18, 'ACK': 0x10 }[t.flags] || 0x02;
+      b.push(
+        ...u16(t.src_port), ...u16(t.dst_port),
+        0x1a, 0x2b, 0x3c, (0x4d + pkt.no) & 0xff,
+        0x00, 0x00, 0x00, 0x00,
+        0x50, fByte, ...u16(t.win != null ? t.win : 65535),
+        0x00, 0x00, 0x00, 0x00
+      );
+      if (t.method) {
+        const hdrs = `${t.method} ${t.uri} HTTP/1.1\r\nHost: ${t.host}\r\nUser-Agent: Mozilla/5.0\r\n\r\n`;
+        for (let i = 0; i < hdrs.length && b.length < pkt.len; i++)
+          b.push(hdrs.charCodeAt(i) & 0xff);
+      }
+    }
+
+    while (b.length < pkt.len) b.push(0x00);
+    return b.slice(0, pkt.len);
+  }
+
+  /* ── formatHexDump ─────────────────────────────────────── */
+  function formatHexDump(bytes) {
+    const lines = [];
+    for (let i = 0; i < bytes.length; i += 16) {
+      const chunk = bytes.slice(i, i + 16);
+      const offset = i.toString(16).padStart(4, '0');
+      const left  = chunk.slice(0, 8).map(b => b.toString(16).padStart(2, '0')).join(' ');
+      const right = chunk.slice(8).map(b  => b.toString(16).padStart(2, '0')).join(' ');
+      const hexStr = right ? `${left}  ${right}` : left;
+      const ascii  = chunk.map(b => (b >= 32 && b < 127) ? String.fromCharCode(b) : '.').join('');
+      lines.push(`${offset}   ${hexStr.padEnd(48)}   ${ascii}`);
+    }
+    return lines.join('\n');
+  }
+
+  /* ── helpers ───────────────────────────────────────────── */
+  function rowClass(pkt) {
+    const f = (pkt.transport.flags || '').toUpperCase();
+    if (pkt.proto === 'HTTP')   return 'row-http';
+    if (pkt.proto === 'ICMP')   return 'row-icmp';
+    if (pkt.proto === 'TCP') {
+      if (f.includes('RST'))    return 'row-rst';
+      if (f.includes('SYN'))    return 'row-syn';
+      return 'row-tcp';
+    }
+    return '';
+  }
+
+  function esc(s) {
+    return String(s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  /* ── Init ──────────────────────────────────────────────── */
+  render();
+})();
+</script>
+</body>
+</html>
