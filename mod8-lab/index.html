@@ -1,0 +1,1074 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
+  <meta name="description" content="Blue Team Army — Lab 08: Invasão na Nuvem. Cloud Security com CloudTrail, IAM, S3 e EC2." />
+  <title>LAB 08 — Invasão na Nuvem | Blue Team Army</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@400;600;700&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet" />
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --navy:#0a0e1a; --navy-mid:#0d1525; --navy-lite:#111e38;
+      --border:#1a2a4a; --border2:#1a3060;
+      --cyan:#00e5ff; --blue:#4a9eff; --green:#00e676;
+      --yellow:#febc2e; --red:#ff1744; --orange:#ff9100;
+      --text:#c8d8f0; --text-dim:#a0c4e0; --text-faint:#2a4a7a;
+      --dim:#8eaac8; --white:#e8f4ff;
+    }
+    html,body { background:var(--navy); color:var(--text); font-family:'Exo 2',sans-serif; overflow-x:hidden; }
+
+    /* ── Token Gate ── */
+    #token-gate { display:none; position:fixed; inset:0; background:var(--navy); z-index:999; flex-direction:column; align-items:center; justify-content:center; padding:24px; text-align:center; }
+    .show-gate #token-gate { display:flex; }
+    .tg-title { font-family:'Exo 2',sans-serif; font-size:clamp(18px,3.5vw,26px); font-weight:700; color:var(--white); margin-bottom:8px; }
+    .tg-sub { font-family:'Rajdhani',sans-serif; font-size:14px; color:var(--text-dim); margin-bottom:28px; }
+    .tg-input { display:block; background:var(--navy-mid); border:1px solid var(--border); color:var(--text); font-family:'Share Tech Mono',monospace; font-size:14px; padding:10px 16px; border-radius:6px; outline:none; width:100%; max-width:340px; text-align:center; letter-spacing:2px; transition:border-color .2s; margin-bottom:12px; }
+    .tg-input:focus { border-color:var(--cyan); }
+    .tg-input.tg-shake { border-color:var(--red); animation:tg-shake .3s ease; }
+    @keyframes tg-shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-6px)} 75%{transform:translateX(6px)} }
+    .tg-btn { display:block; font-family:'Rajdhani',sans-serif; font-size:15px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:var(--cyan); background:rgba(0,229,255,.06); border:1.5px solid var(--cyan); padding:10px 32px; border-radius:6px; cursor:pointer; transition:background .15s; width:100%; max-width:340px; margin-bottom:14px; }
+    .tg-btn:hover { background:rgba(0,229,255,.12); }
+    .tg-err-msg { font-family:'Share Tech Mono',monospace; font-size:12px; color:var(--red); min-height:16px; opacity:0; transition:opacity .2s; }
+    .tg-err-msg.visible { opacity:1; }
+
+    /* ── HUD ── */
+    #hud { position:fixed; top:14px; right:18px; background:var(--navy-mid); border:1px solid var(--border2); border-radius:6px; padding:6px 14px 7px; z-index:200; text-align:right; pointer-events:none; box-shadow:0 2px 16px rgba(0,0,0,.4); }
+    .hud-label { font-family:'Rajdhani',sans-serif; font-size:9px; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-faint); display:block; }
+    .hud-val { font-family:'Exo 2',sans-serif; font-size:19px; font-weight:700; color:var(--cyan); line-height:1.1; }
+    .hud-val .hud-tot { font-size:12px; color:var(--dim); font-weight:400; }
+
+    /* ── Toast ── */
+    .flag-toast { display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:#0b1d3a; border:2px solid var(--cyan); border-radius:10px; padding:24px 34px; text-align:center; z-index:500; pointer-events:none; min-width:220px; }
+    .flag-toast.show { display:block; animation:popin .28s ease; }
+    @keyframes popin { from{transform:translate(-50%,-50%) scale(.82);opacity:0} to{transform:translate(-50%,-50%) scale(1);opacity:1} }
+    .ft-label { font-family:'Rajdhani',sans-serif; font-size:12px; color:var(--blue); letter-spacing:2px; text-transform:uppercase; }
+    .ft-pts { font-family:'Exo 2',sans-serif; font-size:32px; color:var(--cyan); font-weight:700; margin:6px 0; }
+    .ft-msg { font-size:12px; color:var(--green); }
+
+    /* ── Page ── */
+    .page { min-height:100vh; display:flex; flex-direction:column; align-items:center; padding:24px 16px 60px; gap:20px; }
+
+    /* ── Header ── */
+    .site-header { width:100%; max-width:980px; display:flex; align-items:center; justify-content:space-between; padding:0 4px; }
+    .logo { display:flex; align-items:center; gap:12px; text-decoration:none; }
+    .logo-hex { width:40px; height:40px; flex-shrink:0; }
+    .logo-text { font-family:'Exo 2',sans-serif; font-size:18px; font-weight:700; color:var(--cyan); letter-spacing:1.5px; line-height:1.1; }
+    .logo-sub { font-family:'Rajdhani',sans-serif; font-size:11px; color:var(--blue); letter-spacing:2px; text-transform:uppercase; }
+    .header-link { font-family:'Rajdhani',sans-serif; font-size:13px; color:var(--blue); text-decoration:none; border:1px solid var(--border); padding:6px 14px; border-radius:4px; transition:border-color .15s,color .15s; }
+    .header-link:hover { color:var(--cyan); border-color:var(--cyan); }
+
+    /* ── Hero ── */
+    .hero { width:100%; max-width:980px; text-align:center; padding:4px 0 2px; }
+    .hero-tag { display:inline-block; font-family:'Rajdhani',sans-serif; font-size:11px; letter-spacing:3px; text-transform:uppercase; color:var(--cyan); border:1px solid var(--border); padding:4px 12px; border-radius:2px; margin-bottom:12px; }
+    .hero-title { font-family:'Exo 2',sans-serif; font-size:clamp(22px,4vw,34px); font-weight:700; color:var(--white); line-height:1.2; margin-bottom:6px; }
+    .hero-title span { color:var(--cyan); }
+    .hero-subtitle { font-family:'Rajdhani',sans-serif; font-size:13px; color:var(--blue); letter-spacing:2px; text-transform:uppercase; margin-bottom:14px; }
+    .act-progress { display:flex; align-items:center; justify-content:center; gap:6px; flex-wrap:wrap; }
+    .act-step { display:flex; align-items:center; gap:6px; padding:4px 12px; border:1px solid var(--border); border-radius:20px; font-family:'Rajdhani',sans-serif; font-size:11px; color:var(--text-faint); transition:border-color .3s,color .3s,background .3s; white-space:nowrap; }
+    .act-step--active { border-color:var(--cyan); color:var(--cyan); background:rgba(0,229,255,.06); }
+    .act-step--done   { border-color:var(--green); color:var(--green); background:rgba(0,230,118,.06); }
+    .step-num { width:16px; height:16px; border-radius:50%; border:1.5px solid currentColor; display:flex; align-items:center; justify-content:center; font-size:8px; font-weight:700; flex-shrink:0; }
+    .act-step--done .step-num::after { content:'✓'; font-size:8px; }
+    .act-arrow { color:var(--border2); font-size:12px; }
+
+    /* ── Briefing ── */
+    .briefing-card { width:100%; max-width:980px; background:#050810; border:1px solid var(--border2); border-left:4px solid var(--red); border-radius:8px; overflow:hidden; }
+    .bt-bar { display:flex; align-items:center; gap:7px; padding:7px 14px; background:var(--navy-mid); border-bottom:1px solid var(--border); }
+    .bt-dot { width:9px; height:9px; border-radius:50%; }
+    .bt-dot-r{background:var(--red);opacity:.8} .bt-dot-y{background:var(--yellow);opacity:.8} .bt-dot-g{background:var(--green);opacity:.8}
+    .bt-title-bar { font-family:'Share Tech Mono',monospace; font-size:10px; color:var(--dim); margin-left:4px; }
+    .bt-body { padding:14px 18px; font-family:'Share Tech Mono',monospace; font-size:12px; line-height:1.9; color:var(--text-dim); }
+    .bt-hi { color:var(--cyan); font-weight:bold; }
+    .bt-warn { color:var(--red); font-weight:bold; }
+    .bt-cursor { display:inline-block; width:8px; height:13px; background:var(--cyan); vertical-align:middle; margin-left:2px; animation:blink 1s step-end infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+    /* ── Fase Card ── */
+    .fase-wrap { width:100%; max-width:980px; }
+    .fase-card { background:var(--navy-mid); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+    .fase-hdr { padding:11px 18px; background:#080c18; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px; }
+    .fase-num { width:30px; height:30px; border-radius:50%; border:2px solid var(--cyan); display:flex; align-items:center; justify-content:center; font-family:'Exo 2',sans-serif; font-size:14px; font-weight:700; color:var(--cyan); flex-shrink:0; transition:border-color .3s,color .3s; }
+    .fase-num.done { border-color:var(--green); color:var(--green); }
+    .fase-tag { font-family:'Rajdhani',sans-serif; font-size:10px; letter-spacing:1.5px; text-transform:uppercase; color:var(--dim); }
+    .fase-title { font-family:'Exo 2',sans-serif; font-size:15px; font-weight:700; color:var(--white); }
+    .fase-score { font-family:'Exo 2',sans-serif; font-size:14px; font-weight:700; color:var(--cyan); margin-left:auto; white-space:nowrap; }
+    .fase-body { padding:16px; display:flex; gap:16px; }
+    .main-col { flex:1; min-width:0; }
+    .side-col { width:250px; flex-shrink:0; }
+    .sub-label { font-family:'Rajdhani',sans-serif; font-size:11px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-faint); margin-bottom:8px; display:block; }
+
+    /* ── Stats Bar ── */
+    .stats-bar { display:flex; gap:12px; background:#050810; border:1px solid var(--border); border-radius:6px; padding:8px 14px; margin-bottom:10px; flex-wrap:wrap; }
+    .stat { display:flex; flex-direction:column; align-items:center; min-width:50px; }
+    .stat-val { font-family:'Exo 2',sans-serif; font-size:18px; font-weight:700; color:var(--white); line-height:1; }
+    .stat-lbl { font-family:'Rajdhani',sans-serif; font-size:9px; letter-spacing:1px; text-transform:uppercase; color:var(--text-faint); margin-top:2px; text-align:center; }
+    .stat.danger .stat-val { color:var(--red); }
+    .stat.warn .stat-val { color:var(--orange); }
+    .stat-sep { width:1px; background:var(--border); margin:0 4px; }
+
+    /* ── Locked / reveal ── */
+    .locked-card { background:var(--navy-mid); border:1px solid var(--border); border-radius:10px; padding:28px; text-align:center; }
+    .locked-icon { font-size:28px; margin-bottom:10px; opacity:.5; }
+    .locked-title { font-family:'Exo 2',sans-serif; font-size:14px; font-weight:700; color:var(--dim); margin-bottom:5px; }
+    .locked-msg { font-family:'Exo 2',sans-serif; font-size:13px; color:var(--text-faint); }
+    .section-wrap { width:100%; max-width:980px; opacity:0; transform:translateY(20px); transition:opacity .5s ease,transform .5s ease; }
+    .section-wrap.visible { opacity:1; transform:translateY(0); }
+
+    /* ── Checklist ── */
+    .chk-header { font-family:'Rajdhani',sans-serif; font-size:11px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-faint); margin-bottom:8px; }
+    .checklist { display:flex; flex-direction:column; gap:7px; }
+    .chk-item { display:flex; align-items:flex-start; gap:9px; padding:8px 11px; border-radius:5px; background:var(--navy); border:1px solid var(--border); transition:all .25s; }
+    .chk-item.done { border-color:var(--green); background:rgba(0,230,118,.06); }
+    .chk-dot { width:15px; height:15px; border-radius:50%; border:1.5px solid var(--border2); flex-shrink:0; margin-top:1px; display:flex; align-items:center; justify-content:center; transition:all .2s; }
+    .chk-item.done .chk-dot { border-color:var(--green); background:var(--green); }
+    .chk-item.done .chk-dot::after { content:'✓'; color:#000; font-size:8px; font-weight:900; }
+    .chk-text { font-family:'Exo 2',sans-serif; font-size:11px; color:var(--text-dim); line-height:1.4; flex:1; }
+    .chk-item.done .chk-text { color:var(--green); }
+    .chk-pts { font-family:'Exo 2',sans-serif; font-size:11px; font-weight:700; color:var(--dim); display:block; margin-top:2px; }
+    .chk-item.done .chk-pts { color:var(--green); }
+
+    /* ── CloudTrail ── */
+    .ct-filters { display:flex; gap:8px; align-items:center; margin-bottom:8px; flex-wrap:wrap; }
+    .ct-search { flex:1; min-width:160px; background:var(--navy); border:1px solid var(--border); border-radius:5px; color:var(--text); font-family:'Share Tech Mono',monospace; font-size:11px; padding:6px 10px; outline:none; }
+    .ct-search:focus { border-color:var(--cyan); }
+    .ct-fbtn { font-family:'Rajdhani',sans-serif; font-size:11px; font-weight:700; letter-spacing:.8px; padding:5px 10px; border-radius:4px; border:1px solid var(--border); background:transparent; color:var(--dim); cursor:pointer; transition:all .15s; white-space:nowrap; }
+    .ct-fbtn:hover { border-color:var(--blue); color:var(--blue); }
+    .ct-fbtn.active { border-color:var(--cyan); color:var(--cyan); background:rgba(0,229,255,.07); }
+    .ct-fbtn.filter-warn.active { border-color:var(--orange); color:var(--orange); background:rgba(255,145,0,.07); }
+    .ct-fbtn.filter-crit.active { border-color:var(--red); color:var(--red); background:rgba(255,23,68,.07); }
+    .ct-table-wrap { background:#050810; border:1px solid var(--border); border-radius:6px; overflow:hidden; max-height:340px; overflow-y:auto; }
+    .ct-table-wrap::-webkit-scrollbar{width:5px} .ct-table-wrap::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+    .ct-table { width:100%; border-collapse:collapse; }
+    .ct-table th { background:var(--navy-mid); color:var(--text-faint); font-family:'Rajdhani',sans-serif; font-size:10px; font-weight:700; letter-spacing:1px; text-transform:uppercase; padding:7px 10px; text-align:left; border-bottom:1px solid var(--border); white-space:nowrap; position:sticky; top:0; z-index:1; }
+    .ct-row { cursor:pointer; border-bottom:1px solid rgba(26,42,74,.4); border-left:3px solid transparent; transition:background .1s; }
+    .ct-row:hover { background:rgba(74,158,255,.05); }
+    .ct-row.selected { background:rgba(0,229,255,.07); }
+    .ct-row.level-high { border-left-color:var(--orange); }
+    .ct-row.level-critical { border-left-color:var(--red); }
+    .ct-row td { padding:5px 10px; font-family:'Share Tech Mono',monospace; font-size:10.5px; color:var(--text-dim); white-space:nowrap; overflow:hidden; max-width:160px; text-overflow:ellipsis; }
+    .ct-row.level-high td { color:#daa060; }
+    .ct-row.level-critical td { color:#d08080; }
+    .ct-detail-cell { padding:10px 12px 12px 18px; background:rgba(5,8,16,.8); font-family:'Share Tech Mono',monospace; font-size:10.5px; line-height:1.9; color:var(--text-dim); border-top:1px dashed rgba(0,229,255,.12); }
+    .ct-detail-cell .disc-banner { margin-top:8px; padding:7px 10px; background:rgba(0,229,255,.06); border:1px solid rgba(0,229,255,.2); border-radius:4px; color:var(--cyan); font-size:11px; }
+    .level-tag { font-family:'Rajdhani',sans-serif; font-size:9px; font-weight:700; letter-spacing:1px; padding:2px 6px; border-radius:3px; }
+    .level-normal { color:var(--green); border:1px solid rgba(0,230,118,.3); background:rgba(0,230,118,.07); }
+    .level-high    { color:var(--orange); border:1px solid rgba(255,145,0,.35); background:rgba(255,145,0,.08); }
+    .level-critical{ color:var(--red);    border:1px solid rgba(255,23,68,.35); background:rgba(255,23,68,.08); }
+    .log-hint { font-family:'Exo 2',sans-serif; font-size:11px; color:var(--text-faint); margin-top:7px; }
+
+    /* ── IAM ── */
+    .cloud-table-wrap { background:#050810; border:1px solid var(--border); border-radius:6px; overflow:hidden; margin-bottom:12px; }
+    .cloud-table { width:100%; border-collapse:collapse; }
+    .cloud-table th { background:var(--navy-mid); color:var(--text-faint); font-family:'Rajdhani',sans-serif; font-size:10px; font-weight:700; letter-spacing:1px; text-transform:uppercase; padding:7px 10px; text-align:left; border-bottom:1px solid var(--border); white-space:nowrap; }
+    .cloud-row { cursor:pointer; border-bottom:1px solid rgba(26,42,74,.4); border-left:3px solid transparent; transition:background .1s; }
+    .cloud-row:hover { background:rgba(74,158,255,.05); }
+    .cloud-row.selected { background:rgba(0,229,255,.06); }
+    .cloud-row.status-critical { border-left-color:var(--red); }
+    .cloud-row.status-critical td { color:#d08080; }
+    .cloud-row.status-high { border-left-color:var(--orange); }
+    .cloud-row td { padding:6px 10px; font-family:'Share Tech Mono',monospace; font-size:10.5px; color:var(--text-dim); white-space:nowrap; }
+    .cloud-detail-cell { padding:12px 14px 14px 18px; background:rgba(5,8,16,.8); font-family:'Share Tech Mono',monospace; font-size:10.5px; line-height:1.9; color:var(--text-dim); border-top:1px dashed rgba(0,229,255,.1); }
+    .status-badge { font-family:'Rajdhani',sans-serif; font-size:10px; font-weight:700; padding:2px 7px; border-radius:3px; letter-spacing:.8px; }
+    .sb-normal  { color:var(--green);  border:1px solid rgba(0,230,118,.3);  background:rgba(0,230,118,.08); }
+    .sb-critico { color:var(--red);    border:1px solid rgba(255,23,68,.3);   background:rgba(255,23,68,.08); }
+    .mfa-yes { color:var(--green); font-weight:700; }
+    .mfa-no  { color:var(--red);   font-weight:700; }
+    .policy-chip { display:inline-block; font-family:'Share Tech Mono',monospace; font-size:10px; padding:2px 8px; border-radius:3px; margin:2px 3px 2px 0; }
+    .pc-admin  { color:var(--red);  background:rgba(255,23,68,.1); border:1px solid rgba(255,23,68,.3); cursor:pointer; }
+    .pc-admin:hover { background:rgba(255,23,68,.2); }
+    .pc-normal { color:var(--blue); background:rgba(74,158,255,.1); border:1px solid rgba(74,158,255,.25); }
+    .key-warn { color:var(--orange); }
+    .iam-actions { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
+    .btn-iam { font-family:'Rajdhani',sans-serif; font-size:13px; font-weight:700; letter-spacing:1px; text-transform:uppercase; padding:7px 16px; border-radius:5px; cursor:pointer; transition:all .15s; border:1.5px solid; }
+    .btn-iam-mfa { color:var(--cyan); border-color:var(--cyan); background:rgba(0,229,255,.07); }
+    .btn-iam-mfa:hover { background:rgba(0,229,255,.14); }
+    .btn-iam-revoke { color:var(--red); border-color:var(--red); background:rgba(255,23,68,.07); }
+    .btn-iam-revoke:hover { background:rgba(255,23,68,.14); }
+    .btn-iam:disabled { opacity:.4; cursor:not-allowed; }
+    .mfa-panel,.remediation-panel { background:#050810; border:1px solid var(--border); border-radius:6px; padding:14px; margin-bottom:10px; font-family:'Share Tech Mono',monospace; font-size:11px; line-height:1.9; }
+    .mfa-panel { border-color:var(--border2); }
+    .remediation-panel { border-color:rgba(255,23,68,.2); }
+    .panel-title { font-family:'Rajdhani',sans-serif; font-size:12px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(--dim); margin-bottom:10px; }
+    .mfa-line-ok  { color:var(--green); }
+    .mfa-line-bad { color:var(--red); }
+    .rem-item { display:flex; align-items:flex-start; gap:8px; padding:4px 0; color:var(--text-dim); cursor:pointer; }
+    .rem-item input[type=checkbox] { accent-color:var(--red); margin-top:1px; flex-shrink:0; }
+    .btn-confirm-rem { font-family:'Rajdhani',sans-serif; font-size:13px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(--green); background:rgba(0,230,118,.07); border:1.5px solid var(--green); border-radius:5px; padding:8px 20px; cursor:pointer; transition:background .15s; margin-top:12px; }
+    .btn-confirm-rem:hover:not(:disabled) { background:rgba(0,230,118,.14); }
+    .btn-confirm-rem:disabled { opacity:.4; cursor:not-allowed; }
+    .rem-done-msg { color:var(--green); font-family:'Exo 2',sans-serif; font-size:13px; font-weight:700; margin-top:8px; display:none; }
+
+    /* ── Cloud Sections (S3/EC2) ── */
+    .cloud-section { background:#050810; border:1px solid var(--border); border-radius:8px; overflow:hidden; margin-bottom:14px; }
+    .cloud-svc-hdr { display:flex; align-items:center; gap:12px; padding:10px 14px; background:var(--navy-mid); border-bottom:1px solid var(--border); }
+    .cloud-svc-icon { width:34px; height:34px; flex-shrink:0; }
+    .cloud-svc-name { font-family:'Exo 2',sans-serif; font-size:14px; font-weight:700; color:var(--white); }
+    .cloud-svc-sub { font-family:'Rajdhani',sans-serif; font-size:11px; color:var(--dim); }
+    .cloud-svc-stat { margin-left:auto; font-family:'Share Tech Mono',monospace; font-size:10px; color:var(--text-faint); text-align:right; }
+    .risk-badge { font-family:'Rajdhani',sans-serif; font-size:10px; font-weight:700; padding:2px 7px; border-radius:3px; }
+    .rb-normal { color:var(--green); border:1px solid rgba(0,230,118,.3); background:rgba(0,230,118,.07); }
+    .rb-alto   { color:var(--orange); border:1px solid rgba(255,145,0,.3); background:rgba(255,145,0,.07); }
+    .rb-critico{ color:var(--red);   border:1px solid rgba(255,23,68,.3);  background:rgba(255,23,68,.07); }
+    .btn-calc-cost { font-family:'Rajdhani',sans-serif; font-size:13px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--yellow); background:rgba(254,188,46,.07); border:1.5px solid var(--yellow); border-radius:5px; padding:7px 18px; cursor:pointer; transition:background .15s; margin-top:10px; }
+    .btn-calc-cost:hover:not(:disabled) { background:rgba(254,188,46,.14); }
+    .btn-calc-cost:disabled { opacity:.4; cursor:not-allowed; }
+    .cost-panel { background:var(--navy-mid); border:1px solid var(--border); border-radius:6px; padding:12px 14px; margin-top:10px; font-family:'Share Tech Mono',monospace; font-size:11px; line-height:2; display:none; }
+    .cost-panel .cost-line { color:var(--text-dim); }
+    .cost-panel .cost-total { color:var(--orange); font-size:14px; font-weight:700; margin-top:4px; }
+
+    /* ── Relatório Final ── */
+    .rel-card { background:var(--navy-mid); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+    .rel-hdr { padding:12px 18px; background:#080c18; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px; }
+    .rel-badge { font-family:'Share Tech Mono',monospace; font-size:11px; color:var(--cyan); background:rgba(0,229,255,.08); border:1px solid rgba(0,229,255,.2); padding:2px 8px; border-radius:3px; }
+    .rel-title { font-family:'Exo 2',sans-serif; font-size:16px; font-weight:700; color:var(--white); flex:1; }
+    .rel-body { padding:20px; }
+    .rel-form { display:flex; flex-direction:column; gap:14px; margin-bottom:20px; }
+    .form-group { display:flex; flex-direction:column; gap:6px; }
+    .form-label { font-family:'Rajdhani',sans-serif; font-size:11px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-dim); }
+    .form-input,.form-select,.form-textarea { background:var(--navy); border:1px solid var(--border); border-radius:5px; color:var(--text); font-family:'Share Tech Mono',monospace; font-size:12px; padding:8px 12px; outline:none; width:100%; transition:border-color .15s; }
+    .form-input:focus,.form-select:focus,.form-textarea:focus { border-color:var(--cyan); }
+    .form-select { appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='7' viewBox='0 0 12 7'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%238eaac8' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 12px center; padding-right:32px; }
+    .form-select option { background:var(--navy-mid); }
+    .form-textarea { min-height:72px; resize:vertical; font-family:'Exo 2',sans-serif; font-size:13px; }
+    .form-readonly { background:rgba(5,8,16,.6); border-color:var(--text-faint); color:var(--dim); cursor:not-allowed; }
+    .form-checks { display:flex; flex-wrap:wrap; gap:10px; }
+    .form-check-label { display:flex; align-items:center; gap:6px; font-family:'Share Tech Mono',monospace; font-size:11px; color:var(--text-dim); cursor:pointer; }
+    .form-check-label input { accent-color:var(--cyan); width:14px; height:14px; }
+    .btn-finalizar { font-family:'Rajdhani',sans-serif; font-size:15px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:var(--cyan); background:rgba(0,229,255,.08); border:1.5px solid var(--cyan); border-radius:6px; padding:12px 30px; cursor:pointer; transition:background .15s; }
+    .btn-finalizar:hover:not(:disabled) { background:rgba(0,229,255,.16); }
+    .btn-finalizar:disabled { opacity:.35; cursor:not-allowed; }
+    .done-wrap { display:none; margin-top:20px; }
+    .done-wrap.visible { display:block; }
+    .done-doc { background:#050810; border:2px solid var(--cyan); border-radius:8px; padding:20px 24px; font-family:'Share Tech Mono',monospace; font-size:11px; line-height:1.9; color:var(--text-dim); margin-bottom:16px; }
+    .done-doc .dd-title { font-family:'Exo 2',sans-serif; font-size:16px; font-weight:700; color:var(--cyan); margin-bottom:2px; }
+    .done-doc .dd-sub { font-family:'Rajdhani',sans-serif; font-size:11px; color:var(--blue); letter-spacing:2px; margin-bottom:14px; }
+    .done-doc .dd-sep { border:none; border-top:1px solid var(--border); margin:10px 0; }
+    .done-doc .dd-row { display:flex; gap:12px; margin-bottom:4px; }
+    .done-doc .dd-key { color:var(--blue); min-width:200px; flex-shrink:0; }
+    .done-doc .dd-val { color:var(--text); }
+    .done-doc .dd-sig { text-align:center; margin-top:14px; color:var(--green); font-family:'Exo 2',sans-serif; font-size:13px; font-weight:700; }
+    .done-banner { background:var(--navy); border:2px solid var(--cyan); border-radius:10px; padding:28px; text-align:center; }
+    .done-icon { font-size:36px; margin-bottom:8px; }
+    .done-title { font-family:'Exo 2',sans-serif; font-size:22px; font-weight:700; color:var(--cyan); margin-bottom:4px; }
+    .done-score { font-family:'Exo 2',sans-serif; font-size:40px; font-weight:700; color:var(--yellow); margin-bottom:10px; letter-spacing:2px; }
+    .done-msg { font-family:'Rajdhani',sans-serif; font-size:14px; color:var(--text-dim); max-width:500px; margin:0 auto; line-height:1.6; }
+    .done-back { display:inline-block; margin-top:20px; font-family:'Rajdhani',sans-serif; font-size:14px; font-weight:700; letter-spacing:1px; color:var(--green); border:1px solid var(--green); padding:10px 28px; border-radius:5px; text-decoration:none; transition:background .15s; }
+    .done-back:hover { background:rgba(0,230,118,.08); }
+
+    /* ── Footer ── */
+    .site-footer { width:100%; max-width:980px; border-top:1px solid var(--border); padding-top:20px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; }
+    .footer-text { font-family:'Rajdhani',sans-serif; font-size:12px; color:var(--text-faint); }
+    .footer-link { font-family:'Rajdhani',sans-serif; font-size:12px; color:var(--blue); text-decoration:none; }
+    .footer-link:hover { color:var(--cyan); }
+
+    @media(max-width:680px){
+      .header-link{display:none}
+      .fase-body{flex-direction:column}
+      .side-col{width:100%}
+      #hud{top:auto;bottom:14px;right:14px}
+    }
+  </style>
+
+  <script>
+    if(localStorage.getItem('bta-lab08-access')==='BTA-LAB08-2026'){
+      document.documentElement.classList.remove('show-gate');
+    }else{
+      document.documentElement.classList.add('show-gate');
+    }
+  </script>
+</head>
+<body>
+
+<!-- Token Gate -->
+<div id="token-gate" role="dialog" aria-modal="true">
+  <div style="margin-bottom:28px">
+    <svg viewBox="0 0 40 46" width="52" height="60" fill="none">
+      <path d="M20 1L38 11V35L20 45L2 35V11L20 1Z" stroke="#00e5ff" stroke-width="1.5" fill="none"/>
+      <path d="M20 8L33 15.5V30.5L20 38L7 30.5V15.5L20 8Z" fill="#0d1525" stroke="#1a3060" stroke-width="1"/>
+      <text x="20" y="27" text-anchor="middle" font-family="'Exo 2',sans-serif" font-size="11" font-weight="700" fill="#00e5ff">BTA</text>
+    </svg>
+  </div>
+  <h1 class="tg-title">LAB 08 — Acesso Restrito</h1>
+  <p class="tg-sub">Este lab é exclusivo para alunos matriculados.</p>
+  <input type="text" id="token-input" class="tg-input" placeholder="Digite seu token de acesso" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false"/>
+  <button type="button" id="token-btn" class="tg-btn">Acessar Lab</button>
+  <p class="tg-err-msg" id="token-err">Token inválido.</p>
+</div>
+
+<!-- HUD -->
+<div id="hud">
+  <span class="hud-label">Pontuação</span>
+  <div class="hud-val"><span id="hud-pts">0</span> <span class="hud-tot">/ 800 pts</span></div>
+</div>
+
+<!-- Toast -->
+<div class="flag-toast" id="flag-toast">
+  <div class="ft-label" id="toast-label"></div>
+  <div class="ft-pts" id="toast-pts"></div>
+  <div class="ft-msg" id="toast-msg"></div>
+</div>
+
+<div class="page">
+
+  <!-- Header -->
+  <header class="site-header">
+    <a class="logo" href="#">
+      <svg class="logo-hex" viewBox="0 0 40 46" fill="none" aria-hidden="true">
+        <path d="M20 1L38 11V35L20 45L2 35V11L20 1Z" stroke="#00e5ff" stroke-width="1.5" fill="none"/>
+        <path d="M20 8L33 15.5V30.5L20 38L7 30.5V15.5L20 8Z" fill="#0d1525" stroke="#1a3060" stroke-width="1"/>
+        <text x="20" y="27" text-anchor="middle" font-family="'Exo 2',sans-serif" font-size="11" font-weight="700" fill="#00e5ff">BTA</text>
+      </svg>
+      <div>
+        <div class="logo-text">BLUE TEAM ARMY</div>
+        <div class="logo-sub">Training Lab</div>
+      </div>
+    </a>
+    <a class="header-link" href="https://blueteam.army" target="_blank" rel="noopener">blueteam.army &rarr;</a>
+  </header>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="hero-tag">Módulo 8 · Cloud Security Fundamentals</div>
+    <h1 class="hero-title">LAB 08 — <span>Invasão na Nuvem</span></h1>
+    <p class="hero-subtitle">Investigação de incidente AWS · CloudTrail · IAM · S3 · EC2</p>
+    <div class="act-progress">
+      <div class="act-step act-step--active" id="prog-1"><span class="step-num">1</span>Fase 1: CloudTrail</div>
+      <div class="act-arrow">→</div>
+      <div class="act-step" id="prog-2"><span class="step-num">2</span>Fase 2: IAM</div>
+      <div class="act-arrow">→</div>
+      <div class="act-step" id="prog-3"><span class="step-num">3</span>Fase 3: S3 / EC2</div>
+      <div class="act-arrow">→</div>
+      <div class="act-step" id="prog-4"><span class="step-num">4</span>Relatório</div>
+    </div>
+  </section>
+
+  <!-- Briefing -->
+  <div class="briefing-card">
+    <div class="bt-bar">
+      <span class="bt-dot bt-dot-r"></span><span class="bt-dot bt-dot-y"></span><span class="bt-dot bt-dot-g"></span>
+      <span class="bt-title-bar">AWS GuardDuty — ALERTA CRÍTICO — corp-prod (123456789012) — 2024-11-08T06:00Z</span>
+    </div>
+    <div class="bt-body">
+      <span class="bt-warn">⚠ ALERTA GUARDDUTY</span> — Atividade suspeita detectada na conta AWS <span class="bt-hi">corp-prod</span><br>
+      Chave de acesso do usuário <span class="bt-warn">deploy-bot</span> exposta em repositório GitHub público (terraform.tfvars)<br>
+      Atividade fora do horário detectada a partir de <span class="bt-warn">203.0.113.42</span> entre 02:33 e 02:37<br>
+      Missão: investigar logs CloudTrail, auditar IAM e avaliar impacto em S3 e EC2.<span class="bt-cursor"></span>
+    </div>
+  </div>
+
+  <!-- ═══ FASE 1 — CloudTrail ═══ -->
+  <div class="fase-wrap" id="fase1-wrap">
+    <div class="fase-card">
+      <div class="fase-hdr">
+        <div class="fase-num" id="f1-num">1</div>
+        <div><div class="fase-tag">Fase 1</div><div class="fase-title">Análise de CloudTrail</div></div>
+        <div class="fase-score" id="f1-score">0 / 250 pts</div>
+      </div>
+      <div class="fase-body">
+        <div class="main-col">
+          <div class="stats-bar" id="ct-stats">
+            <div class="stat"><span class="stat-val">20</span><span class="stat-lbl">Eventos</span></div>
+            <div class="stat-sep"></div>
+            <div class="stat danger"><span class="stat-val">10</span><span class="stat-lbl">Suspeitos</span></div>
+            <div class="stat-sep"></div>
+            <div class="stat warn"><span class="stat-val">1</span><span class="stat-lbl">IP Externo</span></div>
+            <div class="stat-sep"></div>
+            <div class="stat danger"><span class="stat-val">02:33–02:37</span><span class="stat-lbl">Período Crítico</span></div>
+          </div>
+          <div class="ct-filters">
+            <input type="text" id="ct-search" class="ct-search" placeholder="Buscar por evento, usuário ou IP…"/>
+            <button class="ct-fbtn active" data-filter="all">Todos</button>
+            <button class="ct-fbtn filter-warn" data-filter="suspicious">Suspeitos</button>
+            <button class="ct-fbtn filter-crit" data-filter="external">203.0.113.42</button>
+            <button class="ct-fbtn filter-warn" data-filter="offhours">Fora do Horário</button>
+          </div>
+          <div class="ct-table-wrap">
+            <table class="ct-table">
+              <thead><tr><th>EventTime</th><th>EventName</th><th>Usuário</th><th>IP Origem</th><th>Região</th><th>Nível</th></tr></thead>
+              <tbody id="ct-tbody"></tbody>
+            </table>
+          </div>
+          <p class="log-hint">↑ Clique em um evento para ver detalhes · Use os filtros para encontrar atividade suspeita</p>
+        </div>
+        <div class="side-col">
+          <div class="chk-header">Descobertas — CloudTrail</div>
+          <div class="checklist">
+            <div class="chk-item" id="chk-f1-reconn"><div class="chk-dot"></div><div><div class="chk-text">Reconhecimento de IP externo (GetCallerIdentity)</div><span class="chk-pts">+50 pts</span></div></div>
+            <div class="chk-item" id="chk-f1-exfil"><div class="chk-dot"></div><div><div class="chk-text">Exfiltração S3 (GetObject de corp-backup-2024)</div><span class="chk-pts">+50 pts</span></div></div>
+            <div class="chk-item" id="chk-f1-backdoor"><div class="chk-dot"></div><div><div class="chk-text">Backdoor IAM (CreateUser svc-monitor-01)</div><span class="chk-pts">+50 pts</span></div></div>
+            <div class="chk-item" id="chk-f1-escalada"><div class="chk-dot"></div><div><div class="chk-text">Escalada de privilégio (AttachUserPolicy AdministratorAccess)</div><span class="chk-pts">+50 pts</span></div></div>
+            <div class="chk-item" id="chk-f1-mining"><div class="chk-dot"></div><div><div class="chk-text">Cryptomining (RunInstances 4× t3.xlarge)</div><span class="chk-pts">+50 pts</span></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ FASE 2 — IAM (locked) ═══ -->
+  <div class="section-wrap" id="fase2-wrap">
+    <div class="locked-card">
+      <div class="locked-icon">🔒</div>
+      <div class="locked-title">Fase 2 — Auditoria IAM</div>
+      <div class="locked-msg">Identifique 3 eventos suspeitos no CloudTrail para desbloquear</div>
+    </div>
+  </div>
+
+  <!-- ═══ FASE 3 — S3/EC2 (locked) ═══ -->
+  <div class="section-wrap" id="fase3-wrap">
+    <div class="locked-card">
+      <div class="locked-icon">🔒</div>
+      <div class="locked-title">Fase 3 — Impacto: S3 e EC2</div>
+      <div class="locked-msg">Complete 3 itens da auditoria IAM para desbloquear</div>
+    </div>
+  </div>
+
+  <!-- ═══ RELATÓRIO FINAL (locked) ═══ -->
+  <div class="section-wrap" id="relatorio-wrap">
+    <div class="locked-card">
+      <div class="locked-icon">🔒</div>
+      <div class="locked-title">Relatório de Incidente Cloud</div>
+      <div class="locked-msg">Acumule 600 pts para desbloquear o relatório</div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="site-footer">
+    <span class="footer-text">&copy; 2025 Blue Team Army. Todos os direitos reservados.</span>
+    <a class="footer-link" href="https://blueteam.army" target="_blank" rel="noopener">blueteam.army</a>
+  </footer>
+
+</div>
+
+<script>
+(function(){
+'use strict';
+
+/* ── Token Gate ── */
+(function(){
+  const inp=document.getElementById('token-input'),btn=document.getElementById('token-btn'),err=document.getElementById('token-err');
+  if(!inp)return;
+  function go(){
+    if(inp.value.trim()==='BTA-LAB08-2026'){localStorage.setItem('bta-lab08-access','BTA-LAB08-2026');document.documentElement.classList.remove('show-gate');}
+    else{err.classList.add('visible');inp.classList.add('tg-shake');inp.value='';setTimeout(()=>inp.classList.remove('tg-shake'),400);}
+  }
+  btn.addEventListener('click',go);
+  inp.addEventListener('keydown',e=>{if(e.key==='Enter')go();err.classList.remove('visible');});
+})();
+
+/* ── State ── */
+const score={f1:0,f2:0,f3:0,fr:0};
+const done={f1:new Set(),f2:new Set(),f3:new Set()};
+function total(){return score.f1+score.f2+score.f3+score.fr;}
+
+/* ── Helpers ── */
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function revealSection(el){el.style.display='block';el.offsetHeight;el.classList.add('visible');}
+function scrollTo(el){setTimeout(()=>el.scrollIntoView({behavior:'smooth',block:'start'}),320);}
+function setStep(n,st){
+  const el=document.getElementById('prog-'+n);if(!el)return;
+  el.classList.remove('act-step--active','act-step--done');
+  if(st==='active')el.classList.add('act-step--active');
+  if(st==='done')el.classList.add('act-step--done');
+}
+
+/* ── Toast ── */
+let toastTimer=null;
+function showToast(label,pts,msg){
+  const t=document.getElementById('flag-toast');
+  document.getElementById('toast-label').textContent=label;
+  document.getElementById('toast-pts').textContent='+'+pts+' pts';
+  document.getElementById('toast-msg').textContent=msg;
+  t.classList.add('show');clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>t.classList.remove('show'),2800);
+}
+
+/* ── Award ── */
+function award(phase,key,pts,label,msg){
+  if(done[phase].has(key))return;
+  done[phase].add(key);score[phase]+=pts;
+  document.getElementById('hud-pts').textContent=total();
+  const chk=document.getElementById('chk-'+key);if(chk)chk.classList.add('done');
+  const maxMap={f1:250,f2:250,f3:200};
+  const sc=document.getElementById(phase+'-score');
+  if(sc)sc.textContent=score[phase]+' / '+maxMap[phase]+' pts';
+  if(score[phase]>=(maxMap[phase]||0)){const n=document.getElementById(phase+'-num');if(n)n.classList.add('done');}
+  showToast(label,pts,msg);
+  checkUnlocks();
+}
+
+/* ── Unlocks ── */
+function checkUnlocks(){
+  if(score.f1>=150&&!document.getElementById('fase2-card')){buildFase2();setStep(1,'done');setStep(2,'active');}
+  if(score.f2>=150&&!document.getElementById('fase3-card')){buildFase3();setStep(2,'done');setStep(3,'active');}
+  if(total()>=600&&!document.getElementById('relatorio-card')){buildRelatorio();setStep(3,'done');setStep(4,'active');}
+}
+
+/* ════════════════════════════════════════
+   FASE 1 — CloudTrail Events
+   ════════════════════════════════════════ */
+const CT_EVENTS=[
+  {id:'ct10',ts:'11:15:11',name:'GetBucketAcl',        user:'readonly-audit', ip:'10.0.0.50',     region:'us-east-1',level:'normal',  detail:'Leitura de ACL do bucket corp-logs. Operação de auditoria agendada — comportamento esperado.'},
+  {id:'ct09',ts:'11:00:25',name:'ListObjects',          user:'readonly-audit', ip:'10.0.0.50',     region:'us-east-1',level:'normal',  detail:'Listagem de objetos em corp-logs. Parte da rotina de auditoria diária.'},
+  {id:'ct08',ts:'10:00:00',name:'CreateSnapshot',       user:'admin',          ip:'192.168.1.100', region:'us-east-1',level:'normal',  detail:'Snapshot de volume EBS (vol-0a1b2c3d4e5f6a7b8). Backup agendado diário.'},
+  {id:'ct07',ts:'09:50:33',name:'DescribeTags',         user:'admin',          ip:'192.168.1.100', region:'us-east-1',level:'normal',  detail:'Listagem de tags de recursos EC2. Dashboard de gerenciamento.'},
+  {id:'ct06',ts:'09:45:10',name:'DescribeVpcs',         user:'admin',          ip:'192.168.1.100', region:'us-east-1',level:'normal',  detail:'Listagem de VPCs disponíveis. Revisão de topologia de rede.'},
+  {id:'ct05',ts:'09:35:02',name:'GetBucketPolicy',      user:'admin',          ip:'192.168.1.100', region:'us-east-1',level:'normal',  detail:'Leitura de política do bucket corp-website. Verificação de permissões.'},
+  {id:'ct04',ts:'09:30:44',name:'DescribeSecurityGroups',user:'admin',         ip:'192.168.1.100', region:'us-east-1',level:'normal',  detail:'Listagem de Security Groups. Revisão de regras de firewall de rede.'},
+  {id:'ct03',ts:'09:20:01',name:'ListBuckets',          user:'deploy-bot',     ip:'10.0.0.25',     region:'us-east-1',level:'normal',  detail:'Listagem de buckets S3 pelo CI/CD pipeline. IP interno de jenkins (10.0.0.25).'},
+  {id:'ct02',ts:'09:15:23',name:'DescribeInstances',    user:'admin',          ip:'192.168.1.100', region:'us-east-1',level:'normal',  detail:'Listagem de instâncias EC2. Dashboard de monitoramento operacional.'},
+  {id:'ct01',ts:'09:00:12',name:'ConsoleLogin',         user:'admin',          ip:'192.168.1.100', region:'us-east-1',level:'normal',  detail:'Login no console AWS via MFA. IP interno da rede corporativa (192.168.1.100).'},
+  {id:'ct20',ts:'02:37:55',name:'CreateAccessKey',      user:'svc-monitor-01', ip:'203.0.113.42',  region:'us-east-1',level:'high',    detail:'Chave de acesso criada para svc-monitor-01 às 02:37.\nIP externo 203.0.113.42 — fora do horário comercial.\nSegundo mecanismo de persistência após RunInstances.'},
+  {id:'ct19',ts:'02:37:12',name:'RunInstances',         user:'svc-monitor-01', ip:'203.0.113.42',  region:'us-east-1',level:'critical',discovery:'f1-mining',   discoveryLabel:'⛏️ Cryptomining!', discoveryDesc:'4× t3.xlarge iniciadas fora do horário, sem tags, CPU 98%.', resource:'ImageId: ami-0abcdef1234567890 | InstanceType: t3.xlarge | MinCount: 4 | MaxCount: 4 | TagSpecifications: [] (sem tags)'},
+  {id:'ct18',ts:'02:36:45',name:'AttachUserPolicy',     user:'deploy-bot',     ip:'203.0.113.42',  region:'us-east-1',level:'critical',discovery:'f1-escalada', discoveryLabel:'⬆️ Escalada!',    discoveryDesc:'AdministratorAccess concedida a svc-monitor-01 — acesso total à conta AWS.', resource:'userName: svc-monitor-01 | policyArn: arn:aws:iam::aws:policy/AdministratorAccess'},
+  {id:'ct17',ts:'02:36:00',name:'CreateUser',           user:'deploy-bot',     ip:'203.0.113.42',  region:'us-east-1',level:'critical',discovery:'f1-backdoor', discoveryLabel:'🚪 Backdoor IAM!', discoveryDesc:'Conta svc-monitor-01 criada às 02:36 de IP externo — persistência.', resource:'userName: svc-monitor-01 | tags: [] (sem tags) | path: /'},
+  {id:'ct16',ts:'02:35:22',name:'GetObject',            user:'deploy-bot',     ip:'203.0.113.42',  region:'us-east-1',level:'critical',discovery:'f1-exfil',    discoveryLabel:'📤 Exfiltração!',  discoveryDesc:'financials_q3.xlsx baixado de corp-backup-2024 por IP externo.', resource:'bucketName: corp-backup-2024 | key: financials_q3.xlsx | size: 2.4 MB'},
+  {id:'ct15',ts:'02:35:01',name:'GetObject',            user:'deploy-bot',     ip:'203.0.113.42',  region:'us-east-1',level:'critical',discovery:'f1-exfil',    discoveryLabel:'📤 Exfiltração!',  discoveryDesc:'employees.csv baixado de corp-backup-2024 por IP externo.', resource:'bucketName: corp-backup-2024 | key: employees.csv | size: 890 KB'},
+  {id:'ct14',ts:'02:34:33',name:'ListBuckets',          user:'deploy-bot',     ip:'203.0.113.42',  region:'us-east-1',level:'high',    detail:'Enumeração de todos os buckets S3 da conta.\nIP externo 203.0.113.42 — reconhecimento antes da exfiltração.'},
+  {id:'ct13',ts:'02:34:09',name:'ListRoles',            user:'deploy-bot',     ip:'203.0.113.42',  region:'us-east-1',level:'high',    detail:'Enumeração de todas as IAM Roles disponíveis.\nMapeamento de permissões para escalar privilégios.'},
+  {id:'ct12',ts:'02:33:48',name:'ListUsers',            user:'deploy-bot',     ip:'203.0.113.42',  region:'us-east-1',level:'high',    detail:'Enumeração de todos os usuários IAM da conta.\nMapeamento de alvos para criação de usuário backdoor.'},
+  {id:'ct11',ts:'02:33:01',name:'GetCallerIdentity',    user:'deploy-bot',     ip:'203.0.113.42',  region:'us-east-1',level:'critical',discovery:'f1-reconn',   discoveryLabel:'🔍 Reconhecimento!', discoveryDesc:'Atacante verifica identidade da chave comprometida de IP externo.', resource:'UserArn: arn:aws:iam::123456789012:user/deploy-bot | Account: 123456789012'},
+];
+
+(function buildCTTable(){
+  const tbody=document.getElementById('ct-tbody');
+  CT_EVENTS.forEach(ev=>{
+    const lvlTag=`<span class="level-tag level-${ev.level}">${ev.level==='normal'?'Normal':ev.level==='high'?'Alto':'Crítico'}</span>`;
+    const mainRow=document.createElement('tr');
+    mainRow.className=`ct-row level-${ev.level}`;
+    mainRow.id='ctrow-'+ev.id;
+    mainRow.dataset.id=ev.id;
+    mainRow.innerHTML=`<td>2024-11-08 ${ev.ts}</td><td>${esc(ev.name)}</td><td>${esc(ev.user)}</td><td>${esc(ev.ip)}</td><td>${ev.region}</td><td>${lvlTag}</td>`;
+
+    const detailRow=document.createElement('tr');
+    detailRow.id='ctdetail-'+ev.id;
+    detailRow.style.display='none';
+    let detailContent=`<td colspan="6" class="ct-detail-cell">`;
+    const detailText=ev.detail||(ev.resource?`EventSource: ${ev.name==='GetObject'?'s3':'iam'}.amazonaws.com\nResource: ${ev.resource}`:'');
+    detailContent+=`<span style="color:var(--dim)">EventId:</span> ${ev.id.toUpperCase()}-${Math.random().toString(36).substr(2,8).toUpperCase()}\n`;
+    detailContent+=`<span style="color:var(--dim)">EventTime:</span> 2024-11-08T${ev.ts}Z\n`;
+    detailContent+=`<span style="color:var(--dim)">Principal:</span> ${ev.user} @ ${ev.ip}\n`;
+    if(detailText)detailContent+=esc(detailText).split('\n').map(l=>`<span>${l}</span>`).join('\n');
+    if(ev.resource)detailContent+=`\n<span style="color:var(--dim)">Resource:</span> ${esc(ev.resource)}`;
+    if(ev.discovery){
+      detailContent+=`<div class="disc-banner">🔎 <strong>${esc(ev.discoveryLabel)}</strong> — ${esc(ev.discoveryDesc)}</div>`;
+    }
+    detailContent+=`</td>`;
+    detailRow.innerHTML=detailContent;
+
+    mainRow.addEventListener('click',function(){
+      const wasOpen=this.classList.contains('selected');
+      document.querySelectorAll('.ct-row.selected').forEach(r=>{
+        r.classList.remove('selected');
+        document.getElementById('ctdetail-'+r.dataset.id).style.display='none';
+      });
+      if(!wasOpen){
+        this.classList.add('selected');
+        detailRow.style.display='table-row';
+        if(ev.discovery)award('f1',ev.discovery,50,ev.discoveryLabel,ev.discoveryDesc);
+      }
+    });
+
+    tbody.appendChild(mainRow);
+    tbody.appendChild(detailRow);
+  });
+})();
+
+/* CloudTrail filters */
+(function initCTFilters(){
+  const search=document.getElementById('ct-search');
+  const fbtns=document.querySelectorAll('.ct-fbtn');
+  let activeFilter='all';
+
+  function applyFilter(){
+    const q=search.value.toLowerCase();
+    CT_EVENTS.forEach(ev=>{
+      const mRow=document.getElementById('ctrow-'+ev.id);
+      const dRow=document.getElementById('ctdetail-'+ev.id);
+      let show=true;
+      if(q&&!ev.name.toLowerCase().includes(q)&&!ev.user.toLowerCase().includes(q)&&!ev.ip.includes(q))show=false;
+      if(activeFilter==='suspicious'&&ev.level==='normal')show=false;
+      if(activeFilter==='external'&&ev.ip!=='203.0.113.42')show=false;
+      if(activeFilter==='offhours'&&!ev.ts.startsWith('02:'))show=false;
+      mRow.style.display=show?'':'none';
+      if(!show&&dRow)dRow.style.display='none';
+    });
+  }
+
+  search.addEventListener('input',applyFilter);
+  fbtns.forEach(btn=>{
+    btn.addEventListener('click',function(){
+      fbtns.forEach(b=>b.classList.remove('active'));
+      this.classList.add('active');
+      activeFilter=this.dataset.filter;
+      applyFilter();
+    });
+  });
+})();
+
+/* ════════════════════════════════════════
+   FASE 2 — IAM Audit
+   ════════════════════════════════════════ */
+const IAM_USERS=[
+  {id:'admin',      mfa:true,  created:'2021-03-15',lastLogin:'2024-11-08 09:00',status:'normal',  statusLabel:'Normal',
+   policies:['AdministratorAccess'],note:null},
+  {id:'deploy-bot', mfa:false, created:'2024-01-15',lastLogin:'2024-11-08 02:37 (203.0.113.42)',status:'critical',statusLabel:'CRÍTICO',
+   policies:['AmazonEC2ReadOnlyAccess','AmazonS3ReadOnlyAccess'],
+   note:'CHAVE EXPOSTA: AKIAIOSFODNN7EXAMPLE — GitHub: github.com/corp/infra/terraform.tfvars (commit a3f9c2b)',
+   discovery:'f2-deploy-bot',discoveryLabel:'🔑 Chave Comprometida!',discoveryDesc:'deploy-bot: chave exposta no GitHub + acessada de 203.0.113.42'},
+  {id:'svc-monitor-01',mfa:false,created:'2024-11-08 02:36 (FORA DO HORÁRIO)',lastLogin:'2024-11-08 02:37',status:'critical',statusLabel:'CRÍTICO',
+   policies:['AdministratorAccess'],
+   note:'Criado por deploy-bot de 203.0.113.42 — BACKDOOR IAM',
+   discovery:'f2-backdoor-user',discoveryLabel:'🚪 Backdoor Detectado!',discoveryDesc:'svc-monitor-01: conta backdoor criada pelo atacante às 02:36'},
+  {id:'readonly-audit',mfa:true,created:'2023-07-22',lastLogin:'2024-11-08 11:00',status:'normal',statusLabel:'Normal',
+   policies:['ReadOnlyAccess'],note:null},
+];
+
+function buildFase2(){
+  const wrap=document.getElementById('fase2-wrap');
+
+  const userRows=IAM_USERS.map(u=>{
+    const isCrit=u.status==='critical';
+    const mainTr=`<tr class="cloud-row ${isCrit?'status-critical':''}" id="iamrow-${u.id}" data-uid="${u.id}">
+      <td>${esc(u.id)}</td>
+      <td><span class="${u.mfa?'mfa-yes':'mfa-no'}">${u.mfa?'✓ ATIVO':'✗ SEM MFA'}</span></td>
+      <td>${esc(u.lastLogin)}</td>
+      <td><span class="status-badge ${isCrit?'sb-critico':'sb-normal'}">${u.statusLabel}</span></td>
+    </tr>`;
+    const policies=u.policies.map(p=>{
+      if(p==='AdministratorAccess'&&u.id==='svc-monitor-01'){
+        return`<span class="policy-chip pc-admin" id="chip-admin-policy" title="Clique para investigar">⚠ ${p}</span>`;
+      }
+      return`<span class="policy-chip pc-normal">${p}</span>`;
+    }).join('');
+    const keyInfo=u.id==='deploy-bot'
+      ?`\n<span style="color:var(--dim)">Chave Ativa:</span> AKIAIOSFODNN7EXAMPLE (criada 2024-01-15)\n<span class="key-warn">⚠ ${esc(u.note)}</span>`
+      :u.id==='svc-monitor-01'
+      ?`\n<span style="color:var(--dim)">Chave Ativa:</span> AKIAXXX2024YYYZZZ001 (criada 2024-11-08 02:37)\n<span class="key-warn">⚠ ${esc(u.note)}</span>`
+      :'';
+    const detailTr=`<tr id="iamdetail-${u.id}" style="display:none"><td colspan="4" class="cloud-detail-cell">
+      <span style="color:var(--dim)">Criado em:</span> ${esc(u.created)}\n<span style="color:var(--dim)">Políticas:</span> ${policies}${keyInfo}
+    </td></tr>`;
+    return mainTr+detailTr;
+  }).join('');
+
+  wrap.innerHTML=`
+  <div class="fase-card" id="fase2-card">
+    <div class="fase-hdr">
+      <div class="fase-num" id="f2-num">2</div>
+      <div><div class="fase-tag">Fase 2</div><div class="fase-title">Auditoria IAM — Console de Identidade</div></div>
+      <div class="fase-score" id="f2-score">0 / 250 pts</div>
+    </div>
+    <div class="fase-body">
+      <div class="main-col">
+        <div class="stats-bar">
+          <div class="stat"><span class="stat-val">4</span><span class="stat-lbl">Usuários</span></div>
+          <div class="stat-sep"></div>
+          <div class="stat warn"><span class="stat-val">2/4</span><span class="stat-lbl">Com MFA</span></div>
+          <div class="stat-sep"></div>
+          <div class="stat danger"><span class="stat-val">2</span><span class="stat-lbl">Comprometidos</span></div>
+          <div class="stat-sep"></div>
+          <div class="stat danger"><span class="stat-val">1</span><span class="stat-lbl">AdmAccess indevido</span></div>
+        </div>
+        <div class="cloud-table-wrap">
+          <table class="cloud-table">
+            <thead><tr><th>Usuário</th><th>MFA</th><th>Último Login</th><th>Status</th></tr></thead>
+            <tbody id="iam-tbody">${userRows}</tbody>
+          </table>
+        </div>
+        <div class="iam-actions">
+          <button class="btn-iam btn-iam-mfa" id="btn-audit-mfa">🔐 Auditar MFA</button>
+          <button class="btn-iam btn-iam-revoke" id="btn-revoke">⛔ Revogar e Desabilitar</button>
+        </div>
+        <div class="mfa-panel" id="mfa-panel" style="display:none">
+          <div class="panel-title">MFA Status Audit — 2024-11-08</div>
+          <div class="mfa-line-ok">✓ admin              — MFA: ATIVO</div>
+          <div class="mfa-line-bad">✗ deploy-bot         — MFA: DESATIVADO  ← CHAVE COMPROMETIDA</div>
+          <div class="mfa-line-bad">✗ svc-monitor-01    — MFA: DESATIVADO  ← BACKDOOR DO ATACANTE</div>
+          <div class="mfa-line-ok">✓ readonly-audit     — MFA: ATIVO</div>
+          <div style="margin-top:8px;color:var(--orange)">⚠ 2 de 4 usuários sem MFA — vetores de comprometimento ativos</div>
+        </div>
+        <div class="remediation-panel" id="remediation-panel" style="display:none">
+          <div class="panel-title">Ações de Remediação Recomendadas</div>
+          <label class="rem-item"><input type="checkbox" checked/> Revogar AccessKey AKIAIOSFODNN7EXAMPLE (deploy-bot)</label>
+          <label class="rem-item"><input type="checkbox" checked/> Desabilitar usuário deploy-bot</label>
+          <label class="rem-item"><input type="checkbox" checked/> Revogar AccessKey AKIAXXX2024YYYZZZ001 (svc-monitor-01)</label>
+          <label class="rem-item"><input type="checkbox" checked/> Desabilitar usuário svc-monitor-01</label>
+          <label class="rem-item"><input type="checkbox" checked/> Terminar instâncias i-mining-001 a i-mining-004</label>
+          <label class="rem-item"><input type="checkbox" checked/> Bloquear IP 203.0.113.42 no Security Group</label>
+          <button class="btn-confirm-rem" id="btn-confirm-rem">✓ Confirmar Remediação</button>
+          <div class="rem-done-msg" id="rem-done-msg">✓ Remediação aplicada — usuários desabilitados, chaves revogadas.</div>
+        </div>
+      </div>
+      <div class="side-col">
+        <div class="chk-header">Auditoria IAM — Fase 2</div>
+        <div class="checklist">
+          <div class="chk-item" id="chk-f2-deploy-bot"><div class="chk-dot"></div><div><div class="chk-text">Usuário com chave comprometida (deploy-bot)</div><span class="chk-pts">+50 pts</span></div></div>
+          <div class="chk-item" id="chk-f2-backdoor-user"><div class="chk-dot"></div><div><div class="chk-text">Usuário backdoor criado pelo atacante (svc-monitor-01)</div><span class="chk-pts">+50 pts</span></div></div>
+          <div class="chk-item" id="chk-f2-admin-policy"><div class="chk-dot"></div><div><div class="chk-text">Política AdministratorAccess indevida identificada</div><span class="chk-pts">+50 pts</span></div></div>
+          <div class="chk-item" id="chk-f2-mfa"><div class="chk-dot"></div><div><div class="chk-text">Ausência de MFA nos usuários comprometidos</div><span class="chk-pts">+50 pts</span></div></div>
+          <div class="chk-item" id="chk-f2-remediate"><div class="chk-dot"></div><div><div class="chk-text">Revogação de chaves e desabilitação confirmadas</div><span class="chk-pts">+50 pts</span></div></div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+
+  // IAM row click handlers
+  IAM_USERS.forEach(u=>{
+    const mainRow=document.getElementById('iamrow-'+u.id);
+    const detailRow=document.getElementById('iamdetail-'+u.id);
+    if(!mainRow)return;
+    mainRow.addEventListener('click',function(){
+      const wasOpen=this.classList.contains('selected');
+      document.querySelectorAll('.cloud-row.selected').forEach(r=>{
+        r.classList.remove('selected');
+        const dId=r.id.replace('iamrow-','iamdetail-');
+        const d=document.getElementById(dId);if(d)d.style.display='none';
+      });
+      if(!wasOpen){
+        this.classList.add('selected');
+        detailRow.style.display='table-row';
+        if(u.discovery)award('f2',u.discovery,50,u.discoveryLabel,u.discoveryDesc);
+      }
+    });
+  });
+
+  // Admin policy click
+  document.getElementById('fase2-wrap').addEventListener('click',function(e){
+    if(e.target.id==='chip-admin-policy'){
+      award('f2','f2-admin-policy',50,'⬆️ Política Crítica!','AdministratorAccess indevido em svc-monitor-01 — escalada de privilégio confirmada');
+    }
+  });
+
+  // Audit MFA button
+  document.getElementById('btn-audit-mfa').addEventListener('click',function(){
+    document.getElementById('mfa-panel').style.display='block';
+    this.disabled=true;
+    award('f2','f2-mfa',50,'🔐 MFA Auditado!','2 usuários sem MFA identificados — deploy-bot e svc-monitor-01');
+  });
+
+  // Revoke button
+  document.getElementById('btn-revoke').addEventListener('click',function(){
+    document.getElementById('remediation-panel').style.display='block';
+    this.disabled=true;
+  });
+
+  // Confirm remediation
+  document.getElementById('btn-confirm-rem').addEventListener('click',function(){
+    this.disabled=true;
+    document.getElementById('rem-done-msg').style.display='block';
+    // Update IAM table to show disabled
+    ['deploy-bot','svc-monitor-01'].forEach(uid=>{
+      const row=document.getElementById('iamrow-'+uid);
+      if(row){row.cells[3].innerHTML='<span class="status-badge" style="color:var(--dim);border-color:var(--border)">Desabilitado</span>';}
+    });
+    award('f2','f2-remediate',50,'✓ Remediado!','Chaves revogadas e usuários comprometidos desabilitados');
+  });
+
+  revealSection(wrap);scrollTo(wrap);
+}
+
+/* ════════════════════════════════════════
+   FASE 3 — S3 / EC2
+   ════════════════════════════════════════ */
+const S3_BUCKETS=[
+  {name:'corp-website',       access:'Público',  size:'2.1 GB', objects:847,  risk:'normal',   riskLabel:'Normal',
+   detail:'Conteúdo estático público (HTML/CSS/JS). ACL: public-read apenas para arquivos estáticos. Sem dados sensíveis.'},
+  {name:'corp-backup-2024',   access:'Privado',  size:'128 GB', objects:12483,risk:'critical',  riskLabel:'CRÍTICO',
+   discovery:'f3-s3-exfil',discoveryLabel:'📤 Exfiltração!',discoveryDesc:'2 arquivos sensíveis acessados pelo atacante: employees.csv e financials_q3.xlsx',
+   accessedFiles:['employees.csv (890 KB) — dados de RH de 847 funcionários','financials_q3.xlsx (2.4 MB) — relatório financeiro Q3/2024 — CONFIDENCIAL'],
+   detail:'Bucket privado comprometido. Dados sensíveis acessados de 203.0.113.42 às 02:35.'},
+  {name:'corp-logs',          access:'Privado',  size:'45 GB',  objects:223001,risk:'normal',   riskLabel:'Normal',
+   detail:'Logs de aplicação. Acesso restrito ao grupo ops-team. Sem anomalia detectada.'},
+  {name:'corp-assets-dev',    access:'Público',  size:'8.7 GB', objects:2341, risk:'alto',      riskLabel:'ALTO RISCO',
+   discovery:'f3-s3-misconfig',discoveryLabel:'⚠️ Misconfiguration!',discoveryDesc:'corp-assets-dev: ACL pública aberta — arquivos de desenvolvimento expostos.',
+   detail:'ACL: public-read-write — CONFIGURAÇÃO INCORRETA\nQualquer usuário pode ler E ESCREVER arquivos neste bucket.\nRisco: upload de conteúdo malicioso, exposição de segredos de dev.'},
+];
+
+const EC2_INSTANCES=[
+  {id:'i-normal-001',type:'t2.micro', name:'web-server-prod', cpu:'12%',  state:'running',tags:'Name,Env,Owner',risk:'normal', riskLabel:'Normal'},
+  {id:'i-normal-002',type:'t2.small', name:'app-server-prod', cpu:'28%',  state:'running',tags:'Name,Env,Owner',risk:'normal', riskLabel:'Normal'},
+  {id:'i-mining-001',type:'t3.xlarge',name:'(sem nome)',       cpu:'98%',  state:'running',tags:'(nenhuma)',      risk:'critical',riskLabel:'CRÍTICO',mining:true},
+  {id:'i-mining-002',type:'t3.xlarge',name:'(sem nome)',       cpu:'97%',  state:'running',tags:'(nenhuma)',      risk:'critical',riskLabel:'CRÍTICO',mining:true},
+  {id:'i-mining-003',type:'t3.xlarge',name:'(sem nome)',       cpu:'98%',  state:'running',tags:'(nenhuma)',      risk:'critical',riskLabel:'CRÍTICO',mining:true},
+  {id:'i-mining-004',type:'t3.xlarge',name:'(sem nome)',       cpu:'99%',  state:'running',tags:'(nenhuma)',      risk:'critical',riskLabel:'CRÍTICO',mining:true},
+];
+
+function buildFase3(){
+  const wrap=document.getElementById('fase3-wrap');
+
+  // S3 SVG icon
+  const s3Svg=`<svg class="cloud-svc-icon" viewBox="0 0 34 34" fill="none"><ellipse cx="17" cy="8" rx="11" ry="4" stroke="#febc2e" stroke-width="1.5"/><path d="M6 8v18M28 8v18" stroke="#febc2e" stroke-width="1.5"/><ellipse cx="17" cy="26" rx="11" ry="4" stroke="#febc2e" stroke-width="1.5"/><ellipse cx="17" cy="17" rx="11" ry="4" stroke="#febc2e" stroke-width="1.5" opacity=".5"/></svg>`;
+  // EC2 SVG icon
+  const ec2Svg=`<svg class="cloud-svc-icon" viewBox="0 0 34 34" fill="none"><rect x="4" y="6" width="26" height="9" rx="2" stroke="#4a9eff" stroke-width="1.5"/><rect x="4" y="19" width="26" height="9" rx="2" stroke="#4a9eff" stroke-width="1.5"/><circle cx="26" cy="10.5" r="2" fill="#00e676"/><circle cx="26" cy="23.5" r="2" fill="#ff1744"/></svg>`;
+
+  const s3Rows=S3_BUCKETS.map((b,i)=>{
+    const isCrit=b.risk==='critical';const isHigh=b.risk==='alto';
+    const rbCls=isCrit?'rb-critico':isHigh?'rb-alto':'rb-normal';
+    const mainTr=`<tr class="cloud-row ${isCrit?'status-critical':isHigh?'status-high':''}" id="s3row-${i}" data-bidx="${i}">
+      <td>${esc(b.name)}</td><td>${b.access}</td><td>${b.size}</td>
+      <td>${b.objects.toLocaleString()}</td>
+      <td><span class="risk-badge ${rbCls}">${b.riskLabel}</span></td>
+    </tr>`;
+    let detailContent=`<td colspan="5" class="cloud-detail-cell">${esc(b.detail).replace(/\n/g,'<br>')}`;
+    if(b.accessedFiles){
+      detailContent+=`<br><br><span style="color:var(--orange)">Arquivos acessados pelo atacante:</span><br>`;
+      b.accessedFiles.forEach(f=>detailContent+=`• <span style="color:var(--red)">${esc(f)}</span><br>`);
+    }
+    if(b.discovery){
+      detailContent+=`<div class="disc-banner" style="margin-top:8px">🔎 <strong>${esc(b.discoveryLabel)}</strong> — ${esc(b.discoveryDesc)}</div>`;
+    }
+    detailContent+=`</td>`;
+    const detailTr=`<tr id="s3detail-${i}" style="display:none"><${detailContent}</tr>`;
+    return mainTr+detailTr;
+  }).join('');
+
+  const ec2Rows=EC2_INSTANCES.map((inst,i)=>{
+    const isCrit=inst.risk==='critical';
+    const rbCls=isCrit?'rb-critico':'rb-normal';
+    const cpuColor=parseInt(inst.cpu)>90?'var(--red)':parseInt(inst.cpu)>50?'var(--orange)':'var(--green)';
+    return`<tr class="cloud-row ${isCrit?'status-critical':''}" id="ec2row-${i}" data-iidx="${i}" ${isCrit?'data-mining="1"':''}>
+      <td>${esc(inst.id)}</td><td>${esc(inst.type)}</td><td>${esc(inst.name)}</td>
+      <td style="color:${cpuColor}">${inst.cpu}</td>
+      <td>${inst.state}</td><td>${esc(inst.tags)}</td>
+      <td><span class="risk-badge ${rbCls}">${inst.riskLabel}</span></td>
+    </tr>`;
+  }).join('');
+
+  wrap.innerHTML=`
+  <div class="fase-card" id="fase3-card">
+    <div class="fase-hdr">
+      <div class="fase-num" id="f3-num">3</div>
+      <div><div class="fase-tag">Fase 3</div><div class="fase-title">Avaliação de Impacto — S3 e EC2</div></div>
+      <div class="fase-score" id="f3-score">0 / 200 pts</div>
+    </div>
+    <div class="fase-body">
+      <div class="main-col">
+        <!-- S3 -->
+        <div class="cloud-section">
+          <div class="cloud-svc-hdr">
+            ${s3Svg}
+            <div><div class="cloud-svc-name">Amazon S3</div><div class="cloud-svc-sub">Simple Storage Service</div></div>
+            <div class="cloud-svc-stat">4 buckets · 1 comprometido · 1 misconfiguration</div>
+          </div>
+          <div style="padding:0">
+            <table class="cloud-table">
+              <thead><tr><th>Bucket</th><th>Acesso</th><th>Tamanho</th><th>Objetos</th><th>Risco</th></tr></thead>
+              <tbody id="s3-tbody">${s3Rows}</tbody>
+            </table>
+          </div>
+        </div>
+        <!-- EC2 -->
+        <div class="cloud-section">
+          <div class="cloud-svc-hdr">
+            ${ec2Svg}
+            <div><div class="cloud-svc-name">Amazon EC2</div><div class="cloud-svc-sub">Elastic Compute Cloud</div></div>
+            <div class="cloud-svc-stat">6 instâncias · 4 suspeitas · CPU ~98%</div>
+          </div>
+          <div style="padding:0">
+            <table class="cloud-table">
+              <thead><tr><th>ID</th><th>Tipo</th><th>Nome</th><th>CPU</th><th>Estado</th><th>Tags</th><th>Risco</th></tr></thead>
+              <tbody id="ec2-tbody">${ec2Rows}</tbody>
+            </table>
+          </div>
+          <div style="padding:12px 14px">
+            <button class="btn-calc-cost" id="btn-calc-cost">💰 Calcular Impacto Financeiro</button>
+            <div class="cost-panel" id="cost-panel">
+              <div class="panel-title">Estimativa de Custo — Instâncias de Cryptomining</div>
+              <div class="cost-line">Tipo de instância: t3.xlarge (us-east-1)</div>
+              <div class="cost-line">Custo por hora: $0.1664 / instância</div>
+              <div class="cost-line">Quantidade: 4 instâncias</div>
+              <div class="cost-line">Período estimado: ~4 horas (02:37 → 06:30)</div>
+              <div class="cost-line">─────────────────────────────────</div>
+              <div class="cost-line">Custo por hora: 4 × $0.1664 = $0.6656/h</div>
+              <div class="cost-line">Custo total estimado: $0.6656 × 4h = <span style="color:var(--orange)">$2.66</span></div>
+              <div class="cost-line">+ transferência de dados (estimativa): <span style="color:var(--orange)">$0.40</span></div>
+              <div class="cost-total">⚠ Impacto financeiro estimado: $3.06 + custos de resposta</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="side-col">
+        <div class="chk-header">Impacto — Fase 3</div>
+        <div class="checklist">
+          <div class="chk-item" id="chk-f3-s3-exfil"><div class="chk-dot"></div><div><div class="chk-text">Bucket com dados exfiltrados (corp-backup-2024)</div><span class="chk-pts">+50 pts</span></div></div>
+          <div class="chk-item" id="chk-f3-s3-misconfig"><div class="chk-dot"></div><div><div class="chk-text">Bucket com misconfiguration (corp-assets-dev público)</div><span class="chk-pts">+50 pts</span></div></div>
+          <div class="chk-item" id="chk-f3-ec2-mining"><div class="chk-dot"></div><div><div class="chk-text">4× t3.xlarge de cryptomining detectadas (sem tags)</div><span class="chk-pts">+50 pts</span></div></div>
+          <div class="chk-item" id="chk-f3-ec2-cost"><div class="chk-dot"></div><div><div class="chk-text">Impacto financeiro calculado</div><span class="chk-pts">+50 pts</span></div></div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+
+  // S3 row clicks
+  S3_BUCKETS.forEach((b,i)=>{
+    const mRow=document.getElementById('s3row-'+i);
+    const dRow=document.getElementById('s3detail-'+i);
+    if(!mRow)return;
+    mRow.addEventListener('click',function(){
+      const wasOpen=this.classList.contains('selected');
+      document.querySelectorAll('#s3-tbody .cloud-row.selected').forEach(r=>{
+        r.classList.remove('selected');
+        const idx=r.dataset.bidx;const d=document.getElementById('s3detail-'+idx);if(d)d.style.display='none';
+      });
+      if(!wasOpen){
+        this.classList.add('selected');
+        dRow.style.display='table-row';
+        if(b.discovery)award('f3',b.discovery,50,b.discoveryLabel,b.discoveryDesc);
+      }
+    });
+  });
+
+  // EC2 row clicks (mining instances)
+  EC2_INSTANCES.forEach((inst,i)=>{
+    const mRow=document.getElementById('ec2row-'+i);
+    if(!mRow||!inst.mining)return;
+    mRow.addEventListener('click',function(){
+      this.classList.toggle('selected');
+      award('f3','f3-ec2-mining',50,'⛏️ Mining Detectado!','4× t3.xlarge sem tags, CPU ≥97% — cryptomining confirmado');
+    });
+  });
+
+  // Cost calculator
+  document.getElementById('btn-calc-cost').addEventListener('click',function(){
+    document.getElementById('cost-panel').style.display='block';
+    this.disabled=true;
+    award('f3','f3-ec2-cost',50,'💰 Custo Calculado!','Impacto financeiro estimado: $3.06 por 4 horas de cryptomining');
+  });
+
+  revealSection(wrap);scrollTo(wrap);
+}
+
+/* ════════════════════════════════════════
+   RELATÓRIO FINAL
+   ════════════════════════════════════════ */
+function buildRelatorio(){
+  const wrap=document.getElementById('relatorio-wrap');
+  const cronologia=`02:33 — GetCallerIdentity (reconhecimento de chave)
+02:33 — ListUsers / ListRoles (enumeração IAM)
+02:34 — ListBuckets (enumeração S3)
+02:35 — GetObject employees.csv + financials_q3.xlsx (exfiltração)
+02:36 — CreateUser svc-monitor-01 (backdoor IAM)
+02:36 — AttachUserPolicy AdministratorAccess (escalada)
+02:37 — RunInstances 4× t3.xlarge (cryptomining)
+02:37 — CreateAccessKey svc-monitor-01 (persistência)`;
+
+  wrap.innerHTML=`
+  <div class="rel-card" id="relatorio-card">
+    <div class="rel-hdr">
+      <span class="rel-badge">INCIDENT REPORT</span>
+      <span class="rel-title">Relatório de Incidente — AWS corp-prod — 2024-11-08</span>
+    </div>
+    <div class="rel-body">
+      <div class="rel-form" id="inc-form">
+        <div class="form-group">
+          <label class="form-label">Vetor de Entrada</label>
+          <select class="form-select" id="ir-vetor">
+            <option value="">Selecione o vetor…</option>
+            <option value="exposed-key">Chave de acesso exposta em repositório público (GitHub)</option>
+            <option value="phishing">Phishing / engenharia social</option>
+            <option value="brute-force">Brute force de credenciais</option>
+            <option value="insider">Insider threat</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Recursos Afetados</label>
+          <div class="form-checks">
+            <label class="form-check-label"><input type="checkbox" id="ir-iam" checked/> IAM</label>
+            <label class="form-check-label"><input type="checkbox" id="ir-s3" checked/> S3</label>
+            <label class="form-check-label"><input type="checkbox" id="ir-ec2" checked/> EC2</label>
+            <label class="form-check-label"><input type="checkbox" id="ir-sts"/> STS</label>
+            <label class="form-check-label"><input type="checkbox" id="ir-cloudtrail"/> CloudTrail</label>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Dados Exfiltrados</label>
+          <input type="text" class="form-input" id="ir-dados" value="employees.csv (RH · 847 funcionários), financials_q3.xlsx (financeiro · Q3/2024) — s3://corp-backup-2024"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Cronologia das Ações do Atacante</label>
+          <textarea class="form-textarea form-readonly" id="ir-cronologia" readonly rows="8">${cronologia}</textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Ações de Contenção Imediata</label>
+          <div class="form-checks" style="flex-direction:column;gap:6px;align-items:flex-start">
+            <label class="form-check-label"><input type="checkbox" checked/> Revogar AccessKey de deploy-bot</label>
+            <label class="form-check-label"><input type="checkbox" checked/> Desabilitar svc-monitor-01</label>
+            <label class="form-check-label"><input type="checkbox" checked/> Terminar instâncias de cryptomining</label>
+            <label class="form-check-label"><input type="checkbox" checked/> Bloquear 203.0.113.42 no WAF</label>
+            <label class="form-check-label"><input type="checkbox"/> Habilitar MFA obrigatório para todos</label>
+            <label class="form-check-label"><input type="checkbox"/> Notificar CISO e DPO (dados pessoais)</label>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Impacto Financeiro Estimado</label>
+          <input type="text" class="form-input form-readonly" value="$3.06 (4× t3.xlarge × 4h a $0.1664/h + transferência de dados) + custos de resposta" readonly/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Lições Aprendidas e Melhorias Recomendadas</label>
+          <textarea class="form-textarea" id="ir-licoes" rows="4" placeholder="Descreva as melhorias de segurança recomendadas para evitar recorrência…"></textarea>
+        </div>
+      </div>
+      <button class="btn-finalizar" id="btn-finalizar" disabled>📋 Finalizar Relatório</button>
+      <div class="done-wrap" id="done-wrap">
+        <div class="done-doc" id="done-doc"></div>
+        <div class="done-banner">
+          <div class="done-icon">🏅</div>
+          <h3 class="done-title">Investigação Cloud Concluída!</h3>
+          <div class="done-score" id="done-score">800 pts</div>
+          <p class="done-msg">Você analisou os logs CloudTrail, auditou o IAM, avaliou o impacto em S3 e EC2 e produziu o relatório de incidente. Investigação encerrada com sucesso.</p>
+          <a class="done-back" href="https://blueteam.army/courses">&larr; Voltar para o Curso</a>
+        </div>
+      </div>
+    </div>
+  </div>`;
+
+  function checkForm(){
+    const ok=document.getElementById('ir-vetor').value&&document.getElementById('ir-licoes').value.trim().length>10;
+    document.getElementById('btn-finalizar').disabled=!ok;
+  }
+  document.getElementById('ir-vetor').addEventListener('change',checkForm);
+  document.getElementById('ir-licoes').addEventListener('input',checkForm);
+
+  document.getElementById('btn-finalizar').addEventListener('click',function(){
+    if(this.disabled)return;
+    score.fr=100;document.getElementById('hud-pts').textContent=total();
+    const recursos=['ir-iam','ir-s3','ir-ec2','ir-sts','ir-cloudtrail']
+      .filter(id=>document.getElementById(id)?.checked)
+      .map(id=>id.replace('ir-','').toUpperCase()).join(', ');
+    const now=new Date().toISOString().replace('T',' ').slice(0,19)+' UTC';
+    document.getElementById('done-doc').innerHTML=`
+      <div class="dd-title">INCIDENT REPORT — AWS CLOUD SECURITY</div>
+      <div class="dd-sub">corp-prod (123456789012) · 2024-11-08 · TLP:WHITE</div>
+      <hr class="dd-sep">
+      <div class="dd-row"><span class="dd-key">Vetor de Entrada:</span><span class="dd-val">Chave exposta em repositório GitHub público</span></div>
+      <div class="dd-row"><span class="dd-key">Recursos Afetados:</span><span class="dd-val">${esc(recursos)}</span></div>
+      <div class="dd-row"><span class="dd-key">Dados Exfiltrados:</span><span class="dd-val">employees.csv, financials_q3.xlsx de corp-backup-2024</span></div>
+      <div class="dd-row"><span class="dd-key">Backdoor Criado:</span><span class="dd-val">IAM user svc-monitor-01 com AdministratorAccess</span></div>
+      <div class="dd-row"><span class="dd-key">Cryptomining:</span><span class="dd-val">4× t3.xlarge — impacto $3.06</span></div>
+      <div class="dd-row"><span class="dd-key">Lições Aprendidas:</span><span class="dd-val">${esc(document.getElementById('ir-licoes').value)}</span></div>
+      <hr class="dd-sep">
+      <div class="dd-sig">✅ Relatório gerado por: Analista BTA · ${now}</div>`;
+    document.getElementById('done-score').textContent=total()+' pts';
+    document.getElementById('done-wrap').classList.add('visible');
+    this.style.display='none';
+    setStep(4,'done');
+    setTimeout(()=>document.getElementById('done-wrap').scrollIntoView({behavior:'smooth',block:'start'}),300);
+  });
+
+  revealSection(wrap);scrollTo(wrap);
+}
+
+/* ── Init ── */
+(function init(){
+  document.querySelectorAll('.section-wrap').forEach(sw=>revealSection(sw));
+})();
+
+})();
+</script>
+</body>
+</html>
