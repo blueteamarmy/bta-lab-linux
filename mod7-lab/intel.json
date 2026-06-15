@@ -1,0 +1,56 @@
+{
+  "ips": {
+    "10.20.45.113": {
+      "type": "ip",
+      "value": "10.20.45.113",
+      "country": "BR",
+      "country_name": "Brasil",
+      "asn": "AS28573 CLARO S.A.",
+      "city": "São Paulo",
+      "abuse_score": 100,
+      "abuse_reports": 847,
+      "categories": ["brute-force", "port-scan"],
+      "last_seen": "2024-11-08",
+      "tags": ["scanner", "initial-access", "brute-force"]
+    },
+    "185.220.101.45": {
+      "type": "ip",
+      "value": "185.220.101.45",
+      "country": "RU",
+      "country_name": "Rússia",
+      "asn": "AS205100 F3 NETZE e.U.",
+      "city": "Moscou",
+      "abuse_score": 100,
+      "abuse_reports": 2341,
+      "categories": ["malware", "c2", "payload-host"],
+      "last_seen": "2024-11-08",
+      "tags": ["c2-server", "payload-host", "apt-fin7-br"]
+    }
+  },
+  "domains": {
+    "update-cdn185.net": {
+      "type": "domain",
+      "value": "update-cdn185.net",
+      "registrar": "Namecheap, Inc.",
+      "created": "2024-10-01",
+      "expires": "2025-10-01",
+      "resolves_to": "185.220.101.45",
+      "virustotal_score": "28/90",
+      "categories": ["malware", "c2"],
+      "tags": ["c2-primary", "fast-flux", "apt-fin7-br"]
+    }
+  },
+  "hashes": {
+    "9c2d4b6e8a0f1c3d5e7b9a0c2d4f6b8a0c2d4f6b8a0c2d4f6b8a0c2d4f6b8ac": {
+      "type": "sha256",
+      "value": "9c2d4b6e8a0f1c3d5e7b9a0c2d4f6b8a0c2d4f6b8a0c2d4f6b8a0c2d4f6b8ac",
+      "filename": "setup.exe",
+      "size_bytes": 47832,
+      "detections": "34/72",
+      "malware_name": "Trojan.Generic.Backdoor",
+      "family": "BlackBerry RAT",
+      "first_seen": "2024-10-15",
+      "tags": ["backdoor", "persistence", "c2", "upx-packed", "process-injection"]
+    }
+  }
+}

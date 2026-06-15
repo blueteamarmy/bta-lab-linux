@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
+  <meta name="description" content="Blue Team Army — Lab 07: A Caçada. Threat Hunting com base de inteligência local." />
+  <title>LAB 07 — A Caçada | Blue Team Army</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@400;600;700&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet" />
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --navy:#0a0e1a; --navy-mid:#0d1525; --navy-lite:#111e38;
+      --border:#1a2a4a; --border2:#1a3060;
+      --cyan:#00e5ff; --blue:#4a9eff; --green:#00e676;
+      --yellow:#febc2e; --red:#ff1744; --orange:#ff9100;
+      --text:#c8d8f0; --text-dim:#a0c4e0; --text-faint:#2a4a7a;
+      --dim:#8eaac8; --white:#e8f4ff;
+    }
+    html,body { background:var(--navy); color:var(--text); font-family:'Exo 2',sans-serif; overflow-x:hidden; }
+
+    /* ── Token Gate ── */
+    #token-gate { display:none; position:fixed; inset:0; background:var(--navy); z-index:999; flex-direction:column; align-items:center; justify-content:center; padding:24px; text-align:center; }
+    .show-gate #token-gate { display:flex; }
+    .tg-title { font-family:'Exo 2',sans-serif; font-size:clamp(18px,3.5vw,26px); font-weight:700; color:var(--white); margin-bottom:8px; }
+    .tg-sub { font-family:'Rajdhani',sans-serif; font-size:14px; color:var(--text-dim); margin-bottom:28px; }
+    .tg-input { display:block; background:var(--navy-mid); border:1px solid var(--border); color:var(--text); font-family:'Share Tech Mono',monospace; font-size:14px; padding:10px 16px; border-radius:6px; outline:none; width:100%; max-width:340px; text-align:center; letter-spacing:2px; transition:border-color .2s; margin-bottom:12px; }
+    .tg-input:focus { border-color:var(--cyan); }
+    .tg-input.tg-shake { border-color:var(--red); animation:tg-shake .3s ease; }
+    @keyframes tg-shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-6px)} 75%{transform:translateX(6px)} }
+    .tg-btn { display:block; font-family:'Rajdhani',sans-serif; font-size:15px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:var(--cyan); background:rgba(0,229,255,.06); border:1.5px solid var(--cyan); padding:10px 32px; border-radius:6px; cursor:pointer; transition:background .15s; width:100%; max-width:340px; margin-bottom:14px; }
+    .tg-btn:hover { background:rgba(0,229,255,.12); }
+    .tg-err-msg { font-family:'Share Tech Mono',monospace; font-size:12px; color:var(--red); min-height:16px; opacity:0; transition:opacity .2s; }
+    .tg-err-msg.visible { opacity:1; }
+
+    /* ── HUD ── */
+    #hud { position:fixed; top:14px; right:18px; background:var(--navy-mid); border:1px solid var(--border2); border-radius:6px; padding:6px 14px 7px; z-index:200; text-align:right; pointer-events:none; box-shadow:0 2px 16px rgba(0,0,0,.4); }
+    .hud-label { font-family:'Rajdhani',sans-serif; font-size:9px; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-faint); display:block; }
+    .hud-val { font-family:'Exo 2',sans-serif; font-size:19px; font-weight:700; color:var(--cyan); line-height:1.1; }
+    .hud-val .hud-tot { font-size:12px; color:var(--dim); font-weight:400; }
+
+    /* ── Toast ── */
+    .flag-toast { display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:#0b1d3a; border:2px solid var(--cyan); border-radius:10px; padding:24px 34px; text-align:center; z-index:500; pointer-events:none; min-width:220px; }
+    .flag-toast.show { display:block; animation:popin .28s ease; }
+    @keyframes popin { from{transform:translate(-50%,-50%) scale(.82);opacity:0} to{transform:translate(-50%,-50%) scale(1);opacity:1} }
+    .ft-label { font-family:'Rajdhani',sans-serif; font-size:12px; color:var(--blue); letter-spacing:2px; text-transform:uppercase; }
+    .ft-pts { font-family:'Exo 2',sans-serif; font-size:32px; color:var(--cyan); font-weight:700; margin:6px 0; }
+    .ft-msg { font-size:12px; color:var(--green); }
+
+    /* ── Page ── */
+    .page { min-height:100vh; display:flex; flex-direction:column; align-items:center; padding:24px 16px 60px; gap:20px; }
+
+    /* ── Header ── */
+    .site-header { width:100%; max-width:980px; display:flex; align-items:center; justify-content:space-between; padding:0 4px; }
+    .logo { display:flex; align-items:center; gap:12px; text-decoration:none; }
+    .logo-hex { width:40px; height:40px; flex-shrink:0; }
+    .logo-text { font-family:'Exo 2',sans-serif; font-size:18px; font-weight:700; color:var(--cyan); letter-spacing:1.5px; line-height:1.1; }
+    .logo-sub { font-family:'Rajdhani',sans-serif; font-size:11px; color:var(--blue); letter-spacing:2px; text-transform:uppercase; }
+    .header-link { font-family:'Rajdhani',sans-serif; font-size:13px; color:var(--blue); text-decoration:none; border:1px solid var(--border); padding:6px 14px; border-radius:4px; transition:border-color .15s,color .15s; }
+    .header-link:hover { color:var(--cyan); border-color:var(--cyan); }
+
+    /* ── Hero ── */
+    .hero { width:100%; max-width:980px; text-align:center; padding:4px 0 2px; }
+    .hero-tag { display:inline-block; font-family:'Rajdhani',sans-serif; font-size:11px; letter-spacing:3px; text-transform:uppercase; color:var(--cyan); border:1px solid var(--border); padding:4px 12px; border-radius:2px; margin-bottom:12px; }
+    .hero-title { font-family:'Exo 2',sans-serif; font-size:clamp(22px,4vw,34px); font-weight:700; color:var(--white); line-height:1.2; margin-bottom:6px; }
+    .hero-title span { color:var(--cyan); }
+    .hero-subtitle { font-family:'Rajdhani',sans-serif; font-size:13px; color:var(--blue); letter-spacing:2px; text-transform:uppercase; margin-bottom:14px; }
+    .act-progress { display:flex; align-items:center; justify-content:center; gap:6px; flex-wrap:wrap; }
+    .act-step { display:flex; align-items:center; gap:6px; padding:4px 12px; border:1px solid var(--border); border-radius:20px; font-family:'Rajdhani',sans-serif; font-size:11px; color:var(--text-faint); transition:border-color .3s,color .3s,background .3s; white-space:nowrap; }
+    .act-step--active { border-color:var(--cyan); color:var(--cyan); background:rgba(0,229,255,.06); }
+    .act-step--done   { border-color:var(--green); color:var(--green); background:rgba(0,230,118,.06); }
+    .step-num { width:16px; height:16px; border-radius:50%; border:1.5px solid currentColor; display:flex; align-items:center; justify-content:center; font-size:8px; font-weight:700; flex-shrink:0; }
+    .act-step--done .step-num::after { content:'✓'; font-size:8px; }
+    .act-arrow { color:var(--border2); font-size:12px; }
+
+    /* ── Briefing ── */
+    .briefing-card { width:100%; max-width:980px; background:#050810; border:1px solid var(--border2); border-left:4px solid var(--cyan); border-radius:8px; overflow:hidden; }
+    .bt-bar { display:flex; align-items:center; gap:7px; padding:7px 14px; background:var(--navy-mid); border-bottom:1px solid var(--border); }
+    .bt-dot { width:9px; height:9px; border-radius:50%; }
+    .bt-dot-r{background:var(--red);opacity:.8} .bt-dot-y{background:var(--yellow);opacity:.8} .bt-dot-g{background:var(--green);opacity:.8}
+    .bt-title-bar { font-family:'Share Tech Mono',monospace; font-size:10px; color:var(--dim); margin-left:4px; }
+    .bt-body { padding:14px 18px; font-family:'Share Tech Mono',monospace; font-size:12px; line-height:1.9; color:var(--text-dim); }
+    .bt-hi { color:var(--cyan); font-weight:bold; }
+    .bt-warn { color:var(--orange); }
+    .bt-cursor { display:inline-block; width:8px; height:13px; background:var(--cyan); vertical-align:middle; margin-left:2px; animation:blink 1s step-end infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+    /* ── Fase Card ── */
+    .fase-wrap { width:100%; max-width:980px; }
+    .fase-card { background:var(--navy-mid); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+    .fase-hdr { padding:11px 18px; background:#080c18; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px; }
+    .fase-num { width:30px; height:30px; border-radius:50%; border:2px solid var(--cyan); display:flex; align-items:center; justify-content:center; font-family:'Exo 2',sans-serif; font-size:14px; font-weight:700; color:var(--cyan); flex-shrink:0; transition:border-color .3s,color .3s; }
+    .fase-num.done { border-color:var(--green); color:var(--green); }
+    .fase-tag { font-family:'Rajdhani',sans-serif; font-size:10px; letter-spacing:1.5px; text-transform:uppercase; color:var(--dim); }
+    .fase-title { font-family:'Exo 2',sans-serif; font-size:15px; font-weight:700; color:var(--white); flex:1; }
+    .fase-score { font-family:'Exo 2',sans-serif; font-size:14px; font-weight:700; color:var(--cyan); white-space:nowrap; }
+    .fase-body { padding:16px; display:flex; gap:16px; }
+    .main-col { flex:1; min-width:0; }
+    .side-col { width:250px; flex-shrink:0; }
+    .sub-label { font-family:'Rajdhani',sans-serif; font-size:11px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-faint); margin-bottom:8px; display:block; }
+
+    /* ── Locked ── */
+    .locked-card { background:var(--navy-mid); border:1px solid var(--border); border-radius:10px; padding:28px; text-align:center; }
+    .locked-icon { font-size:28px; margin-bottom:10px; opacity:.5; }
+    .locked-title { font-family:'Exo 2',sans-serif; font-size:14px; font-weight:700; color:var(--dim); margin-bottom:5px; }
+    .locked-msg { font-family:'Exo 2',sans-serif; font-size:13px; color:var(--text-faint); }
+
+    /* ── Section reveal ── */
+    .section-wrap { width:100%; max-width:980px; opacity:0; transform:translateY(20px); transition:opacity .5s ease,transform .5s ease; }
+    .section-wrap.visible { opacity:1; transform:translateY(0); }
+
+    /* ── Checklist ── */
+    .chk-header { font-family:'Rajdhani',sans-serif; font-size:11px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-faint); margin-bottom:8px; }
+    .checklist { display:flex; flex-direction:column; gap:7px; }
+    .chk-item { display:flex; align-items:flex-start; gap:9px; padding:8px 11px; border-radius:5px; background:var(--navy); border:1px solid var(--border); transition:all .25s; }
+    .chk-item.done { border-color:var(--green); background:rgba(0,230,118,.06); }
+    .chk-item.wrong { border-color:var(--orange); background:rgba(255,145,0,.06); }
+    .chk-dot { width:15px; height:15px; border-radius:50%; border:1.5px solid var(--border2); flex-shrink:0; margin-top:1px; display:flex; align-items:center; justify-content:center; transition:all .2s; }
+    .chk-item.done .chk-dot { border-color:var(--green); background:var(--green); }
+    .chk-item.done .chk-dot::after { content:'✓'; color:#000; font-size:8px; font-weight:900; }
+    .chk-item.wrong .chk-dot { border-color:var(--orange); background:var(--orange); }
+    .chk-item.wrong .chk-dot::after { content:'✗'; color:#000; font-size:8px; font-weight:900; }
+    .chk-text { font-family:'Exo 2',sans-serif; font-size:11px; color:var(--text-dim); line-height:1.4; flex:1; }
+    .chk-item.done .chk-text { color:var(--green); }
+    .chk-item.wrong .chk-text { color:var(--orange); }
+    .chk-pts { font-family:'Exo 2',sans-serif; font-size:11px; font-weight:700; color:var(--dim); display:block; margin-top:2px; }
+    .chk-item.done .chk-pts { color:var(--green); }
+
+    /* ── Fase 1: Intel Report ── */
+    .report-card { background:#050810; border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+    .report-bar { display:flex; align-items:center; gap:7px; padding:7px 14px; background:var(--navy-mid); border-bottom:1px solid var(--border); }
+    .report-bar .rb-title { font-family:'Share Tech Mono',monospace; font-size:10px; color:var(--dim); margin-left:4px; flex:1; }
+    .report-bar .rb-tlp { font-family:'Rajdhani',sans-serif; font-size:10px; font-weight:700; letter-spacing:1.5px; color:var(--white); background:#2a1a00; border:1px solid var(--yellow); padding:2px 8px; border-radius:3px; }
+    .report-text { max-height:380px; overflow-y:auto; padding:14px 18px; font-family:'Share Tech Mono',monospace; font-size:11.5px; line-height:1.8; color:var(--text-dim); white-space:pre-wrap; word-break:break-word; }
+    .report-text::-webkit-scrollbar{width:5px} .report-text::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+    .ioc-span { color:var(--yellow); cursor:pointer; border-bottom:1.5px dotted var(--yellow); border-radius:2px; padding:0 2px; transition:background .15s,color .15s; }
+    .ioc-span:hover { background:rgba(254,188,46,.14); }
+    .ioc-span.found { color:var(--green); border-bottom-color:var(--green); background:rgba(0,230,118,.1); cursor:default; }
+    .report-hint { font-family:'Exo 2',sans-serif; font-size:11px; color:var(--text-faint); margin-top:8px; }
+    .rh-yellow { color:var(--yellow); }
+
+    /* ── Fase 2: SIEM Hunt ── */
+    .siem-statusbar { font-family:'Share Tech Mono',monospace; font-size:10.5px; color:var(--text-faint); background:var(--navy-mid); border:1px solid var(--border); border-radius:4px; padding:7px 12px; margin-bottom:10px; display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+    .siem-dot { width:7px; height:7px; border-radius:50%; background:var(--green); animation:siem-pulse 1.5s infinite; flex-shrink:0; }
+    @keyframes siem-pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+    .siem-events { display:flex; flex-direction:column; gap:8px; max-height:460px; overflow-y:auto; padding-right:4px; }
+    .siem-events::-webkit-scrollbar{width:4px} .siem-events::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+
+    .ev-card { background:var(--navy); border:1px solid var(--border); border-radius:7px; padding:12px 14px; transition:border-color .25s,background .25s; }
+    .ev-card.ev-match  { border-color:var(--green); background:rgba(0,230,118,.05); }
+    .ev-card.ev-noise  { border-color:var(--border2); opacity:.7; }
+    .ev-card.ev-wrong  { border-color:var(--orange); background:rgba(255,145,0,.05); }
+
+    .ev-meta-row { display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap; }
+    .ev-type-badge { font-family:'Rajdhani',sans-serif; font-size:10px; font-weight:700; letter-spacing:1px; padding:2px 7px; border-radius:3px; }
+    .ev-auth  { background:rgba(74,158,255,.12); color:var(--blue);   border:1px solid rgba(74,158,255,.25); }
+    .ev-net   { background:rgba(0,229,255,.08);  color:var(--cyan);   border:1px solid rgba(0,229,255,.2); }
+    .ev-dns   { background:rgba(127,212,232,.08);color:#7fd4e8;       border:1px solid rgba(127,212,232,.2); }
+    .ev-usrm  { background:rgba(254,188,46,.08); color:var(--yellow); border:1px solid rgba(254,188,46,.2); }
+    .ev-syst  { background:rgba(142,170,200,.06);color:var(--dim);    border:1px solid var(--border); }
+
+    .ev-time { font-family:'Share Tech Mono',monospace; font-size:10px; color:var(--text-faint); }
+    .sev-badge { font-family:'Rajdhani',sans-serif; font-size:10px; font-weight:700; padding:2px 7px; border-radius:3px; }
+    .sev-critica { color:var(--red);    border:1px solid rgba(255,23,68,.3);  background:rgba(255,23,68,.08); }
+    .sev-alta    { color:var(--orange); border:1px solid rgba(255,145,0,.3);  background:rgba(255,145,0,.08); }
+    .sev-baixa   { color:var(--green);  border:1px solid rgba(0,230,118,.3);  background:rgba(0,230,118,.08); }
+    .sev-info    { color:var(--dim);    border:1px solid var(--border); }
+
+    .ev-title { font-family:'Exo 2',sans-serif; font-size:13px; font-weight:700; color:var(--white); margin-bottom:5px; }
+    .ev-desc  { font-family:'Share Tech Mono',monospace; font-size:10.5px; color:var(--text-dim); line-height:1.65; margin-bottom:10px; }
+    .ev-actions { display:flex; gap:8px; flex-wrap:wrap; }
+
+    .btn-ev { font-family:'Rajdhani',sans-serif; font-size:12px; font-weight:700; letter-spacing:.8px; padding:6px 14px; border-radius:5px; cursor:pointer; transition:all .15s; border:1.5px solid; }
+    .btn-ev-match { color:var(--cyan); border-color:var(--cyan); background:rgba(0,229,255,.05); }
+    .btn-ev-match:hover:not(:disabled) { background:rgba(0,229,255,.12); }
+    .btn-ev-noise { color:var(--dim); border-color:var(--border2); background:transparent; }
+    .btn-ev-noise:hover:not(:disabled) { border-color:var(--dim); color:var(--text); }
+    .btn-ev:disabled { opacity:.45; cursor:not-allowed; }
+
+    .ev-result { margin-top:8px; padding:7px 11px; border-radius:4px; font-family:'Exo 2',sans-serif; font-size:11.5px; line-height:1.5; display:none; }
+    .ev-result.correct { display:block; background:rgba(0,230,118,.1); border:1px solid rgba(0,230,118,.3); color:var(--green); }
+    .ev-result.wrong   { display:block; background:rgba(255,145,0,.1);  border:1px solid rgba(255,145,0,.3);  color:var(--orange); }
+
+    /* ── Fase 3: Enrichment ── */
+    .enrich-list { display:flex; flex-direction:column; gap:12px; }
+    .enrich-card { background:var(--navy); border:1px solid var(--border); border-radius:7px; overflow:hidden; transition:border-color .25s; }
+    .enrich-card.enriched { border-color:var(--cyan); }
+    .enrich-hdr { padding:9px 14px; background:var(--navy-mid); border-bottom:1px solid var(--border); display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .enrich-ioc-badge { font-family:'Share Tech Mono',monospace; font-size:11px; color:var(--cyan); background:rgba(0,229,255,.07); border:1px solid rgba(0,229,255,.2); padding:2px 9px; border-radius:3px; flex-shrink:0; }
+    .enrich-title { font-family:'Exo 2',sans-serif; font-size:13px; font-weight:700; color:var(--white); flex:1; }
+    .enrich-body { padding:12px 14px; }
+    .enrich-ctx { font-family:'Exo 2',sans-serif; font-size:12px; color:var(--text-faint); margin-bottom:10px; }
+    .enrich-fields { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:12px; }
+    .enrich-field { background:var(--navy-mid); border:1px solid var(--border); border-radius:4px; padding:7px 10px; }
+    .ef-label { font-family:'Rajdhani',sans-serif; font-size:9px; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-faint); margin-bottom:3px; }
+    .ef-val { font-family:'Share Tech Mono',monospace; font-size:10.5px; color:var(--text-faint); transition:color .3s; }
+    .ef-val.filled { color:var(--text-dim); }
+    .ef-val.filled.critical { color:var(--red); }
+    .ef-val.filled.warn { color:var(--orange); }
+    .ef-val.filled.ok { color:var(--green); }
+
+    .btn-consultar { font-family:'Rajdhani',sans-serif; font-size:13px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(--cyan); background:rgba(0,229,255,.07); border:1.5px solid var(--cyan); border-radius:5px; padding:7px 20px; cursor:pointer; transition:background .15s; }
+    .btn-consultar:hover:not(:disabled) { background:rgba(0,229,255,.14); }
+    .btn-consultar:disabled { opacity:.4; cursor:not-allowed; }
+
+    /* ── Relatório Final ── */
+    .rel-card { background:var(--navy-mid); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+    .rel-hdr { padding:12px 18px; background:#080c18; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px; }
+    .rel-badge { font-family:'Share Tech Mono',monospace; font-size:11px; color:var(--cyan); background:rgba(0,229,255,.08); border:1px solid rgba(0,229,255,.2); padding:2px 8px; border-radius:3px; }
+    .rel-title { font-family:'Exo 2',sans-serif; font-size:16px; font-weight:700; color:var(--white); flex:1; }
+    .rel-body { padding:20px; }
+    .rel-form { display:flex; flex-direction:column; gap:14px; margin-bottom:20px; }
+    .form-group { display:flex; flex-direction:column; gap:6px; }
+    .form-group-row { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    .form-label { font-family:'Rajdhani',sans-serif; font-size:11px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-dim); }
+    .form-input,.form-textarea { background:var(--navy); border:1px solid var(--border); border-radius:5px; color:var(--text); font-family:'Share Tech Mono',monospace; font-size:12px; padding:8px 12px; outline:none; width:100%; transition:border-color .15s; }
+    .form-input:focus,.form-textarea:focus { border-color:var(--cyan); }
+    .form-textarea { min-height:72px; resize:vertical; font-family:'Exo 2',sans-serif; font-size:13px; }
+    .form-iocs { display:flex; flex-wrap:wrap; gap:8px; }
+    .ioc-check-label { display:flex; align-items:center; gap:6px; cursor:pointer; font-family:'Share Tech Mono',monospace; font-size:11px; color:var(--text-dim); }
+    .ioc-check-label input[type=checkbox] { accent-color:var(--cyan); width:14px; height:14px; }
+
+    .btn-finalizar { font-family:'Rajdhani',sans-serif; font-size:15px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:var(--cyan); background:rgba(0,229,255,.08); border:1.5px solid var(--cyan); border-radius:6px; padding:12px 30px; cursor:pointer; transition:background .15s; }
+    .btn-finalizar:hover:not(:disabled) { background:rgba(0,229,255,.16); }
+    .btn-finalizar:disabled { opacity:.35; cursor:not-allowed; }
+
+    /* Completion banner */
+    .hunt-done { display:none; margin-top:20px; }
+    .hunt-done.visible { display:block; }
+    .hunt-doc { background:#050810; border:2px solid var(--cyan); border-radius:8px; padding:20px 24px; font-family:'Share Tech Mono',monospace; font-size:11px; line-height:1.9; color:var(--text-dim); margin-bottom:16px; }
+    .hunt-doc .hd-title { font-family:'Exo 2',sans-serif; font-size:16px; font-weight:700; color:var(--cyan); margin-bottom:2px; }
+    .hunt-doc .hd-sub { font-family:'Rajdhani',sans-serif; font-size:12px; color:var(--blue); letter-spacing:2px; margin-bottom:14px; }
+    .hunt-doc .hd-sep { border:none; border-top:1px solid var(--border); margin:10px 0; }
+    .hunt-doc .hd-row { display:flex; gap:12px; margin-bottom:4px; }
+    .hunt-doc .hd-key { color:var(--blue); min-width:200px; flex-shrink:0; }
+    .hunt-doc .hd-val { color:var(--text); }
+    .hunt-doc .hd-sig { text-align:center; margin-top:14px; color:var(--green); font-family:'Exo 2',sans-serif; font-size:13px; font-weight:700; }
+    .done-banner { background:var(--navy); border:2px solid var(--cyan); border-radius:10px; padding:28px; text-align:center; }
+    .done-icon { font-size:36px; margin-bottom:8px; }
+    .done-title { font-family:'Exo 2',sans-serif; font-size:22px; font-weight:700; color:var(--cyan); margin-bottom:4px; }
+    .done-score { font-family:'Exo 2',sans-serif; font-size:40px; font-weight:700; color:var(--yellow); margin-bottom:10px; letter-spacing:2px; }
+    .done-msg { font-family:'Rajdhani',sans-serif; font-size:14px; color:var(--text-dim); max-width:500px; margin:0 auto; line-height:1.6; }
+    .done-back { display:inline-block; margin-top:20px; font-family:'Rajdhani',sans-serif; font-size:14px; font-weight:700; letter-spacing:1px; color:var(--green); border:1px solid var(--green); padding:10px 28px; border-radius:5px; text-decoration:none; transition:background .15s; }
+    .done-back:hover { background:rgba(0,230,118,.08); }
+
+    /* ── Footer ── */
+    .site-footer { width:100%; max-width:980px; border-top:1px solid var(--border); padding-top:20px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; }
+    .footer-text { font-family:'Rajdhani',sans-serif; font-size:12px; color:var(--text-faint); }
+    .footer-link { font-family:'Rajdhani',sans-serif; font-size:12px; color:var(--blue); text-decoration:none; }
+    .footer-link:hover { color:var(--cyan); }
+
+    @media(max-width:680px){
+      .header-link{display:none}
+      .fase-body{flex-direction:column}
+      .side-col{width:100%}
+      .form-group-row{grid-template-columns:1fr}
+      .enrich-fields{grid-template-columns:1fr}
+      #hud{top:auto;bottom:14px;right:14px}
+    }
+  </style>
+
+  <script>
+    if(localStorage.getItem('bta-lab07-access')==='BTA-LAB07-2026'){
+      document.documentElement.classList.remove('show-gate');
+    }else{
+      document.documentElement.classList.add('show-gate');
+    }
+  </script>
+</head>
+<body>
+
+<!-- Token Gate -->
+<div id="token-gate" role="dialog" aria-modal="true">
+  <div style="margin-bottom:28px">
+    <svg viewBox="0 0 40 46" width="52" height="60" fill="none">
+      <path d="M20 1L38 11V35L20 45L2 35V11L20 1Z" stroke="#00e5ff" stroke-width="1.5" fill="none"/>
+      <path d="M20 8L33 15.5V30.5L20 38L7 30.5V15.5L20 8Z" fill="#0d1525" stroke="#1a3060" stroke-width="1"/>
+      <text x="20" y="27" text-anchor="middle" font-family="'Exo 2',sans-serif" font-size="11" font-weight="700" fill="#00e5ff">BTA</text>
+    </svg>
+  </div>
+  <h1 class="tg-title">LAB 07 — Acesso Restrito</h1>
+  <p class="tg-sub">Este lab é exclusivo para alunos matriculados.</p>
+  <input type="text" id="token-input" class="tg-input" placeholder="Digite seu token de acesso" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false"/>
+  <button type="button" id="token-btn" class="tg-btn">Acessar Lab</button>
+  <p class="tg-err-msg" id="token-err">Token inválido.</p>
+</div>
+
+<!-- HUD -->
+<div id="hud">
+  <span class="hud-label">Pontuação</span>
+  <div class="hud-val"><span id="hud-pts">0</span> <span class="hud-tot">/ 800 pts</span></div>
+</div>
+
+<!-- Toast -->
+<div class="flag-toast" id="flag-toast">
+  <div class="ft-label" id="toast-label"></div>
+  <div class="ft-pts" id="toast-pts"></div>
+  <div class="ft-msg" id="toast-msg"></div>
+</div>
+
+<div class="page">
+
+  <!-- Header -->
+  <header class="site-header">
+    <a class="logo" href="#">
+      <svg class="logo-hex" viewBox="0 0 40 46" fill="none" aria-hidden="true">
+        <path d="M20 1L38 11V35L20 45L2 35V11L20 1Z" stroke="#00e5ff" stroke-width="1.5" fill="none"/>
+        <path d="M20 8L33 15.5V30.5L20 38L7 30.5V15.5L20 8Z" fill="#0d1525" stroke="#1a3060" stroke-width="1"/>
+        <text x="20" y="27" text-anchor="middle" font-family="'Exo 2',sans-serif" font-size="11" font-weight="700" fill="#00e5ff">BTA</text>
+      </svg>
+      <div>
+        <div class="logo-text">BLUE TEAM ARMY</div>
+        <div class="logo-sub">Training Lab</div>
+      </div>
+    </a>
+    <a class="header-link" href="https://blueteam.army" target="_blank" rel="noopener">blueteam.army &rarr;</a>
+  </header>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="hero-tag">Módulo 7 · Threat Intelligence e Threat Hunting</div>
+    <h1 class="hero-title">LAB 07 — <span>A Caçada</span></h1>
+    <p class="hero-subtitle">Threat Hunting com base de inteligência local</p>
+    <div class="act-progress">
+      <div class="act-step act-step--active" id="prog-1"><span class="step-num">1</span>Fase 1: Relatório</div>
+      <div class="act-arrow">→</div>
+      <div class="act-step" id="prog-2"><span class="step-num">2</span>Fase 2: Hunt</div>
+      <div class="act-arrow">→</div>
+      <div class="act-step" id="prog-3"><span class="step-num">3</span>Fase 3: Enriquecimento</div>
+      <div class="act-arrow">→</div>
+      <div class="act-step" id="prog-4"><span class="step-num">4</span>Relatório Final</div>
+    </div>
+  </section>
+
+  <!-- Briefing -->
+  <div class="briefing-card">
+    <div class="bt-bar">
+      <span class="bt-dot bt-dot-r"></span><span class="bt-dot bt-dot-y"></span><span class="bt-dot bt-dot-g"></span>
+      <span class="bt-title-bar">BTA Threat Hunting Console — OPERAÇÃO CAÇADA — 2024-11-09T08:00Z</span>
+    </div>
+    <div class="bt-body">
+      <span class="bt-hi">INTEL RECEBIDA</span> — Relatório de ameaça classificado · TLP:WHITE<br>
+      Grupo: <span class="bt-warn">APT-FIN7-BR</span> · Infraestrutura conhecida · Alvo: setor financeiro brasileiro<br>
+      Os artefatos deste grupo foram vistos no <span class="bt-hi">Caso BTA-2024-0042</span> (Lab 06) — a mesma infraestrutura.<br>
+      Missão: extrair os IOCs do relatório, caçar evidências na nossa rede e enriquecer os alertas.<span class="bt-cursor"></span>
+    </div>
+  </div>
+
+  <!-- ═══ FASE 1 — Extrair IOCs ═══ -->
+  <div class="fase-wrap" id="fase1-wrap">
+    <div class="fase-card">
+      <div class="fase-hdr">
+        <div class="fase-num" id="f1-num">1</div>
+        <div><div class="fase-tag">Fase 1</div><div class="fase-title">Extrair IOCs do Relatório</div></div>
+        <div class="fase-score" id="f1-score">0 / 200 pts</div>
+      </div>
+      <div class="fase-body">
+        <div class="main-col">
+          <span class="sub-label">Relatório de Inteligência — APT-FIN7-BR</span>
+          <div class="report-card">
+            <div class="report-bar">
+              <span class="bt-dot bt-dot-r"></span><span class="bt-dot bt-dot-y"></span><span class="bt-dot bt-dot-g"></span>
+              <span class="rb-title">threat-intel-apt-fin7-br.pdf</span>
+              <span class="rb-tlp">TLP:WHITE</span>
+            </div>
+            <pre class="report-text" id="report-text"></pre>
+          </div>
+          <p class="report-hint">↑ Clique nos IOCs destacados em <span class="rh-yellow">amarelo</span> para extraí-los para a checklist</p>
+        </div>
+        <div class="side-col">
+          <div class="chk-header">IOCs Extraídos — Fase 1</div>
+          <div class="checklist">
+            <div class="chk-item" id="chk-f1-ip1"><div class="chk-dot"></div><div><div class="chk-text">IP 10.20.45.113 identificado</div><span class="chk-pts">+40 pts</span></div></div>
+            <div class="chk-item" id="chk-f1-ip2"><div class="chk-dot"></div><div><div class="chk-text">IP 185.220.101.45 identificado</div><span class="chk-pts">+40 pts</span></div></div>
+            <div class="chk-item" id="chk-f1-domain"><div class="chk-dot"></div><div><div class="chk-text">Domínio update-cdn185.net identificado</div><span class="chk-pts">+40 pts</span></div></div>
+            <div class="chk-item" id="chk-f1-hash"><div class="chk-dot"></div><div><div class="chk-text">Hash SHA256 identificado</div><span class="chk-pts">+40 pts</span></div></div>
+            <div class="chk-item" id="chk-f1-ttp"><div class="chk-dot"></div><div><div class="chk-text">Técnica T1136 identificada</div><span class="chk-pts">+40 pts</span></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ FASE 2 — Hunt na Rede ═══ -->
+  <div class="section-wrap" id="fase2-wrap">
+    <div class="locked-card" id="fase2-locked">
+      <div class="locked-icon">🔒</div>
+      <div class="locked-title">Fase 2 — Hunt na Rede</div>
+      <div class="locked-msg">Extraia pelo menos 4 IOCs do relatório para desbloquear</div>
+    </div>
+  </div>
+
+  <!-- ═══ FASE 3 — Enriquecimento ═══ -->
+  <div class="section-wrap" id="fase3-wrap">
+    <div class="locked-card" id="fase3-locked">
+      <div class="locked-icon">🔒</div>
+      <div class="locked-title">Fase 3 — Enriquecimento de Alertas</div>
+      <div class="locked-msg">Confirme 3 correspondências na Fase 2 para desbloquear</div>
+    </div>
+  </div>
+
+  <!-- ═══ RELATÓRIO FINAL ═══ -->
+  <div class="section-wrap" id="relatorio-wrap">
+    <div class="locked-card" id="relatorio-locked">
+      <div class="locked-icon">🔒</div>
+      <div class="locked-title">Relatório Final — Hunt Report</div>
+      <div class="locked-msg">Acumule 600 pts para desbloquear o relatório de hunt</div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="site-footer">
+    <span class="footer-text">&copy; 2025 Blue Team Army. Todos os direitos reservados.</span>
+    <a class="footer-link" href="https://blueteam.army" target="_blank" rel="noopener">blueteam.army</a>
+  </footer>
+
+</div>
+
+<script>
+(function(){
+'use strict';
+
+/* ── Token Gate ── */
+(function(){
+  const inp=document.getElementById('token-input'),btn=document.getElementById('token-btn'),err=document.getElementById('token-err');
+  if(!inp)return;
+  function go(){
+    if(inp.value.trim()==='BTA-LAB07-2026'){localStorage.setItem('bta-lab07-access','BTA-LAB07-2026');document.documentElement.classList.remove('show-gate');}
+    else{err.classList.add('visible');inp.classList.add('tg-shake');inp.value='';setTimeout(()=>inp.classList.remove('tg-shake'),400);}
+  }
+  btn.addEventListener('click',go);
+  inp.addEventListener('keydown',e=>{if(e.key==='Enter')go();err.classList.remove('visible');});
+})();
+
+/* ── State ── */
+const score={f1:0,f2:0,f3:0,fr:0};
+const done={f1:new Set(),f2:new Set(),f3:new Set()};
+let tnDone={ev6:false,ev7:false,ev8:false};
+function total(){return score.f1+score.f2+score.f3+score.fr;}
+
+/* ── Helpers ── */
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function revealSection(el){el.style.display='block';el.offsetHeight;el.classList.add('visible');}
+function scrollTo(el){setTimeout(()=>el.scrollIntoView({behavior:'smooth',block:'start'}),320);}
+function setStep(n,st){
+  const el=document.getElementById('prog-'+n);if(!el)return;
+  el.classList.remove('act-step--active','act-step--done');
+  if(st==='active')el.classList.add('act-step--active');
+  if(st==='done')el.classList.add('act-step--done');
+}
+
+/* ── Toast ── */
+let toastTimer=null;
+function showToast(label,pts,msg){
+  const t=document.getElementById('flag-toast');
+  document.getElementById('toast-label').textContent=label;
+  document.getElementById('toast-pts').textContent=pts>0?'+'+pts+' pts':msg?'':pts+' pts';
+  document.getElementById('toast-msg').textContent=msg;
+  if(pts===0&&!msg)return;
+  t.classList.add('show');clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>t.classList.remove('show'),2800);
+}
+
+/* ── Award ── */
+function award(phase,key,pts,label,msg){
+  if(done[phase].has(key))return;
+  done[phase].add(key);score[phase]+=pts;
+  document.getElementById('hud-pts').textContent=total();
+  const chk=document.getElementById('chk-'+key);if(chk)chk.classList.add('done');
+  const sc=document.getElementById(phase+'-score');
+  if(sc){
+    const maxMap={f1:200,f2:300,f3:200};
+    sc.textContent=score[phase]+' / '+maxMap[phase]+' pts';
+  }
+  if(score[phase]>=(phase==='f1'?200:phase==='f2'?300:200)){
+    const num=document.getElementById(phase+'-num');if(num)num.classList.add('done');
+  }
+  showToast(label,pts,msg);
+  checkUnlocks();
+}
+
+/* ── Unlocks ── */
+function checkUnlocks(){
+  if(score.f1>=150&&!document.getElementById('fase2-card')){buildFase2();setStep(1,'done');setStep(2,'active');}
+  if(score.f2>=150&&!document.getElementById('fase3-card')){buildFase3();setStep(2,'done');setStep(3,'active');}
+  if(total()>=600&&!document.getElementById('relatorio-card')){buildRelatorio();setStep(3,'done');setStep(4,'active');}
+}
+
+/* ════════════════════════════════════════
+   FASE 1 — Intel Report
+   ════════════════════════════════════════ */
+const IOC_META={
+  'f1-ip1':   {pts:40,label:'🎯 IOC Extraído!',msg:'IP 10.20.45.113 — scanner e acesso inicial'},
+  'f1-ip2':   {pts:40,label:'🎯 IOC Extraído!',msg:'IP 185.220.101.45 — servidor C2 e payload'},
+  'f1-domain':{pts:40,label:'🌐 IOC Extraído!',msg:'Domínio update-cdn185.net — C2 primário'},
+  'f1-hash':  {pts:40,label:'#️⃣ IOC Extraído!',msg:'Hash SHA256 do malware setup.exe'},
+  'f1-ttp':   {pts:40,label:'📋 TTP Extraída!',msg:'T1136 Create Account — conta criada sem ticket'},
+};
+
+(function buildReport(){
+  const el=document.getElementById('report-text');
+  if(!el)return;
+  el.innerHTML=
+`RELATÓRIO DE AMEAÇA — TLP:WHITE
+Grupo: APT-FIN7-BR (fictício)
+Data: 2024-11-01
+
+RESUMO:
+Campanha direcionada a instituições financeiras brasileiras utilizando
+técnicas de Living off the Land e infraestrutura de C2 rotativa.
+
+INDICADORES DE COMPROMETIMENTO:
+
+IPs:
+- <span class="ioc-span" data-key="f1-ip1">10.20.45.113</span> (scanner / acesso inicial)
+- <span class="ioc-span" data-key="f1-ip2">185.220.101.45</span> (servidor C2 / download de payload)
+
+Domínios:
+- <span class="ioc-span" data-key="f1-domain">update-cdn185.net</span> (C2 primário)
+- cdn-update-srv.net (C2 backup)
+
+Hashes:
+- MD5: 4a8a08f09d37b73795649030408b5f8 (setup.exe)
+- SHA256: <span class="ioc-span" data-key="f1-hash">9c2d4b6e8a0f1c3d5e7b9a0c2d4f6b8a0c2d4f6b8a0c2d4f6b8a0c2d4f6b8ac</span> (setup.exe)
+
+TTPs (MITRE ATT&amp;CK):
+- T1110 Brute Force
+- T1078 Valid Accounts
+- <span class="ioc-span" data-key="f1-ttp">T1136</span> Create Account
+- T1071 Application Layer Protocol
+- T1048 Exfiltration Over Alternative Protocol
+
+RECOMENDAÇÕES:
+Bloquear IPs e domínios no firewall/proxy. Caçar hashes nos endpoints.
+Verificar contas criadas sem ticket de RH entre outubro e novembro de 2024.`;
+
+  el.querySelectorAll('.ioc-span').forEach(span=>{
+    span.addEventListener('click',function(){
+      const key=this.dataset.key;
+      if(done.f1.has(key))return;
+      this.classList.add('found');
+      const m=IOC_META[key];
+      award('f1',key,m.pts,m.label,m.msg);
+    });
+  });
+})();
+
+/* ════════════════════════════════════════
+   FASE 2 — SIEM Hunt
+   ════════════════════════════════════════ */
+const EVENTS=[
+  {id:'ev1',type:'AUTH',typeCls:'ev-auth',sev:'Alta',sevCls:'sev-alta',time:'2024-11-08 02:17:31',
+   title:'Login SSH bem-sucedido — root',
+   desc:'Autenticação SSH aceita para usuário root vindo de 10.20.45.113:54278. Precedido por 23 tentativas falhas de brute force nas últimas 8 min.',
+   match:true,ioc:'IP 10.20.45.113 (scanner / acesso inicial — relatório APT-FIN7-BR)'},
+  {id:'ev2',type:'NET',typeCls:'ev-net',sev:'Crítica',sevCls:'sev-critica',time:'2024-11-08 02:00:02',
+   title:'Download de executável — setup.exe',
+   desc:'GET http://185.220.101.45/setup.exe — 47.832 bytes transferidos. SHA256: 9c2d4b6e8a0f1c3d5e7b9a0c2d4f6b8a0c2d4f6b8a0c2d4f6b8a0c2d4f6b8ac. Host: srv01.',
+   match:true,ioc:'IP 185.220.101.45 + Hash SHA256 (payload setup.exe — ambos no relatório)'},
+  {id:'ev3',type:'USRM',typeCls:'ev-usrm',sev:'Alta',sevCls:'sev-alta',time:'2024-11-08 02:19:47',
+   title:'Criação de conta sem ticket de RH',
+   desc:'Conta svc_update criada por root via CLI (useradd). Período out/nov 2024. Sem solicitação de RH correspondente. Grupo: administrators.',
+   match:true,ioc:'TTP T1136 Create Account (criar conta sem ticket — recomendação do relatório)'},
+  {id:'ev4',type:'DNS',typeCls:'ev-dns',sev:'Crítica',sevCls:'sev-critica',time:'2024-11-08 02:00:01',
+   title:'Query DNS — domínio suspeito',
+   desc:'Resolução: update-cdn185.net → 185.220.101.45. Origem: 192.168.10.7 (srv01). Segunda consulta ao mesmo domínio em menos de 60s.',
+   match:true,ioc:'Domínio update-cdn185.net (C2 primário — relatório APT-FIN7-BR)'},
+  {id:'ev5',type:'NET',typeCls:'ev-net',sev:'Crítica',sevCls:'sev-critica',time:'2024-11-08 02:17:05',
+   title:'Beacon C2 — POST /gate.php',
+   desc:'POST http://185.220.101.45:8080/gate.php a cada 300s. Body: host=srv01&user=root&os=linux. 4 beacons detectados em 20 minutos.',
+   match:true,ioc:'IP 185.220.101.45 (servidor C2 — comunicação pós-infecção)'},
+  {id:'ev6',type:'AUTH',typeCls:'ev-auth',sev:'Baixa',sevCls:'sev-baixa',time:'2024-11-08 09:00:03',
+   title:'Login normal — jsilva',
+   desc:'Autenticação via VPN corporativa (192.168.30.55). Usuário jsilva — analista de dados. Horário comercial. Sem anomalia de geo ou dispositivo.',
+   match:false,ioc:null},
+  {id:'ev7',type:'SYST',typeCls:'ev-syst',sev:'Info',sevCls:'sev-info',time:'2024-11-08 02:00:00',
+   title:'Windows Update — WSUS agendado',
+   desc:'Tarefa automática de atualização de sistema via WSUS interno (10.0.0.50). Comportamento esperado. Agendado todo dia 8 às 02:00.',
+   match:false,ioc:null},
+  {id:'ev8',type:'SYST',typeCls:'ev-syst',sev:'Info',sevCls:'sev-info',time:'2024-11-08 03:00:00',
+   title:'Backup agendado — backup-srv',
+   desc:'Tarefa semanal de backup concluída com sucesso. Origem: 192.168.10.100 (backup-srv). Destino: NAS interno (10.0.0.200). Duração: 42 min.',
+   match:false,ioc:null},
+];
+
+function buildFase2(){
+  const wrap=document.getElementById('fase2-wrap');
+  const evCards=EVENTS.map(ev=>`
+    <div class="ev-card" id="evcard-${ev.id}">
+      <div class="ev-meta-row">
+        <span class="ev-type-badge ${ev.typeCls}">${ev.type}</span>
+        <span class="ev-time">${ev.time}</span>
+        <span class="sev-badge ${ev.sevCls}">${ev.sev}</span>
+      </div>
+      <div class="ev-title">${esc(ev.title)}</div>
+      <div class="ev-desc">${esc(ev.desc)}</div>
+      <div class="ev-actions">
+        <button class="btn-ev btn-ev-match" data-evid="${ev.id}" data-answer="true">📍 Correspondência com IOC</button>
+        <button class="btn-ev btn-ev-noise" data-evid="${ev.id}" data-answer="false">○ Sem correspondência</button>
+      </div>
+      <div class="ev-result" id="evres-${ev.id}"></div>
+    </div>`).join('');
+
+  wrap.innerHTML=`
+  <div class="fase-card" id="fase2-card">
+    <div class="fase-hdr">
+      <div class="fase-num" id="f2-num">2</div>
+      <div><div class="fase-tag">Fase 2</div><div class="fase-title">Hunt na Rede — Console SIEM</div></div>
+      <div class="fase-score" id="f2-score">0 / 300 pts</div>
+    </div>
+    <div class="fase-body">
+      <div class="main-col">
+        <div class="siem-statusbar">
+          <span class="siem-dot"></span>
+          <span>BTA-SIEM v2.4 · CONECTADO</span>
+          <span style="color:var(--dim)">Filtro: Últimas 8h · <strong style="color:var(--text)">8 eventos</strong></span>
+          <span style="color:var(--text-faint)">Marque cada evento como Correspondência ou Sem correspondência</span>
+        </div>
+        <div class="siem-events">${evCards}</div>
+      </div>
+      <div class="side-col">
+        <div class="chk-header">Resultado da Caçada</div>
+        <div class="checklist">
+          <div class="chk-item" id="chk-f2-ev1"><div class="chk-dot"></div><div><div class="chk-text">Login SSH de 10.20.45.113</div><span class="chk-pts">+50 pts</span></div></div>
+          <div class="chk-item" id="chk-f2-ev2"><div class="chk-dot"></div><div><div class="chk-text">Download de setup.exe de 185.220.101.45</div><span class="chk-pts">+50 pts</span></div></div>
+          <div class="chk-item" id="chk-f2-ev3"><div class="chk-dot"></div><div><div class="chk-text">Conta criada sem ticket (T1136)</div><span class="chk-pts">+50 pts</span></div></div>
+          <div class="chk-item" id="chk-f2-ev4"><div class="chk-dot"></div><div><div class="chk-text">DNS para update-cdn185.net</div><span class="chk-pts">+50 pts</span></div></div>
+          <div class="chk-item" id="chk-f2-ev5"><div class="chk-dot"></div><div><div class="chk-text">Beacon C2 POST /gate.php</div><span class="chk-pts">+50 pts</span></div></div>
+          <div class="chk-item" id="chk-f2-tn-bonus" style="margin-top:4px;border-top:1px solid var(--border);padding-top:10px;border-radius:0;background:transparent">
+            <div class="chk-dot"></div><div><div class="chk-text">Bônus: 3 ruídos filtrados corretamente</div><span class="chk-pts">+50 pts</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+
+  wrap.querySelectorAll('.btn-ev').forEach(btn=>{
+    btn.addEventListener('click',function(){
+      const evId=this.dataset.evid;
+      const answer=this.dataset.answer==='true';
+      classifyEvent(evId,answer);
+    });
+  });
+  scrollTo(wrap);
+}
+
+function classifyEvent(evId,answer){
+  const card=document.getElementById('evcard-'+evId);
+  if(!card)return;
+  card.querySelectorAll('.btn-ev').forEach(b=>b.disabled=true);
+
+  const ev=EVENTS.find(e=>e.id===evId);
+  const res=document.getElementById('evres-'+evId);
+  const correct=(answer===ev.match);
+
+  if(ev.match){
+    if(correct){
+      card.classList.add('ev-match');
+      res.className='ev-result correct';
+      res.textContent='✓ Correto — '+ev.ioc;
+      award('f2','f2-'+evId,50,'📍 Confirmado!','Correspondência com IOC detectada: '+ev.title);
+    } else {
+      card.classList.add('ev-wrong');
+      res.className='ev-result wrong';
+      res.textContent='✗ Errado — Este evento corresponde ao IOC: '+ev.ioc;
+    }
+  } else {
+    if(correct){
+      card.classList.add('ev-noise');
+      res.className='ev-result correct';
+      res.textContent='✓ Correto — Ruído filtrado. Nenhum IOC correspondente neste evento.';
+      tnDone[evId]=true;
+      if(tnDone.ev6&&tnDone.ev7&&tnDone.ev8){
+        award('f2','f2-tn-bonus',50,'🏆 Bônus!','3 falsos positivos filtrados corretamente — análise precisa!');
+      }
+    } else {
+      card.classList.add('ev-wrong');
+      res.className='ev-result wrong';
+      res.textContent='✗ Errado — Este é um evento legítimo (ruído). Nenhum IOC da base corresponde.';
+    }
+  }
+}
+
+/* ════════════════════════════════════════
+   FASE 3 — Enriquecimento
+   ════════════════════════════════════════ */
+const INTEL_DB={
+  'ip1':{
+    ioc:'10.20.45.113',title:'Acesso SSH Suspeito',type:'IP',sev:'Alta',sevCls:'sev-alta',
+    ctx:'Origem das tentativas de brute force e do acesso inicial ao servidor srv01 em 2024-11-08.',
+    fields:[
+      {label:'País de Origem',val:'🇧🇷 BR — Brasil',cls:''},
+      {label:'ASN / Provedor',val:'AS28573 CLARO S.A.',cls:''},
+      {label:'Score Abuse',val:'100 / 100 (crítico)',cls:'critical'},
+      {label:'Relatórios Abuse',val:'847 denúncias',cls:'warn'},
+      {label:'Categorias',val:'brute-force, port-scan',cls:'warn'},
+      {label:'Última Atividade',val:'2024-11-08',cls:''},
+    ],
+    award:'f3-ip1',pts:50,toastLabel:'🔍 Enriquecido!',toastMsg:'Intel de 10.20.45.113 carregada — 847 denúncias AbuseIPDB',
+  },
+  'ip2':{
+    ioc:'185.220.101.45',title:'Servidor C2 Identificado',type:'IP',sev:'Crítica',sevCls:'sev-critica',
+    ctx:'Destino dos beacons C2 e fonte do payload setup.exe. Detectado no caso BTA-2024-0042.',
+    fields:[
+      {label:'País de Origem',val:'🇷🇺 RU — Rússia',cls:'critical'},
+      {label:'ASN / Provedor',val:'AS205100 F3 NETZE e.U.',cls:''},
+      {label:'Score Abuse',val:'100 / 100 (crítico)',cls:'critical'},
+      {label:'Relatórios Abuse',val:'2.341 denúncias',cls:'critical'},
+      {label:'Categorias',val:'malware, c2, payload-host',cls:'critical'},
+      {label:'Última Atividade',val:'2024-11-08',cls:''},
+    ],
+    award:'f3-ip2',pts:50,toastLabel:'🔍 Enriquecido!',toastMsg:'Intel de 185.220.101.45 — C2 confirmado, 2.341 denúncias',
+  },
+  'domain':{
+    ioc:'update-cdn185.net',title:'Domínio C2 Primário',type:'DOMAIN',sev:'Crítica',sevCls:'sev-critica',
+    ctx:'Domínio resolvido durante análise de tráfego DNS. C2 primário do grupo APT-FIN7-BR.',
+    fields:[
+      {label:'Registrado em',val:'2024-10-01 (Namecheap)',cls:'warn'},
+      {label:'Expira em',val:'2025-10-01',cls:''},
+      {label:'Resolve para',val:'185.220.101.45',cls:'critical'},
+      {label:'VirusTotal',val:'28 / 90 engines',cls:'warn'},
+      {label:'Categorias',val:'malware, c2, fast-flux',cls:'critical'},
+      {label:'Status',val:'ATIVO — BLOQUEAR',cls:'critical'},
+    ],
+    award:'f3-domain',pts:50,toastLabel:'🌐 Enriquecido!',toastMsg:'Domínio C2: 28/90 engines, resolve para 185.220.101.45',
+  },
+  'hash':{
+    ioc:'9c2d4b6e…4f6b8ac',title:'Malware — setup.exe',type:'HASH',sev:'Crítica',sevCls:'sev-critica',
+    ctx:'Hash SHA256 do payload setup.exe baixado de 185.220.101.45. Visto no caso BTA-2024-0042.',
+    fields:[
+      {label:'Nome Detectado',val:'Trojan.Generic.Backdoor',cls:'critical'},
+      {label:'Família',val:'BlackBerry RAT',cls:'critical'},
+      {label:'Detecções',val:'34 / 72 engines',cls:'warn'},
+      {label:'Primeira Detecção',val:'2024-10-15',cls:''},
+      {label:'Compressão',val:'UPX packed (anti-AV)',cls:'warn'},
+      {label:'Tags',val:'backdoor, persistence, c2',cls:'critical'},
+    ],
+    award:'f3-hash',pts:50,toastLabel:'🦠 Enriquecido!',toastMsg:'Malware confirmado: Trojan.Generic.Backdoor / BlackBerry RAT',
+  },
+};
+
+function buildFase3(){
+  const wrap=document.getElementById('fase3-wrap');
+  const keys=['ip1','ip2','domain','hash'];
+  const cards=keys.map(k=>{
+    const d=INTEL_DB[k];
+    const fields=d.fields.map(f=>`
+      <div class="enrich-field">
+        <div class="ef-label">${esc(f.label)}</div>
+        <div class="ef-val" data-cls="${f.cls}">—</div>
+      </div>`).join('');
+    return`
+    <div class="enrich-card" id="enrich-card-${k}">
+      <div class="enrich-hdr">
+        <span class="sev-badge ${d.sevCls}">${d.sev}</span>
+        <span class="enrich-title">${esc(d.title)}</span>
+        <span class="enrich-ioc-badge">${esc(d.ioc)}</span>
+      </div>
+      <div class="enrich-body">
+        <p class="enrich-ctx">${esc(d.ctx)}</p>
+        <div class="enrich-fields" id="enrich-fields-${k}">${fields}</div>
+        <button class="btn-consultar" data-intel="${k}" id="btn-consultar-${k}">🔍 Consultar Intel</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  wrap.innerHTML=`
+  <div class="fase-card" id="fase3-card">
+    <div class="fase-hdr">
+      <div class="fase-num" id="f3-num">3</div>
+      <div><div class="fase-tag">Fase 3</div><div class="fase-title">Enriquecimento de Alertas</div></div>
+      <div class="fase-score" id="f3-score">0 / 200 pts</div>
+    </div>
+    <div class="fase-body">
+      <div class="main-col">
+        <span class="sub-label">Base de Inteligência Local — intel.json</span>
+        <div class="enrich-list">${cards}</div>
+      </div>
+      <div class="side-col">
+        <div class="chk-header">Enriquecimento — Fase 3</div>
+        <div class="checklist">
+          <div class="chk-item" id="chk-f3-ip1"><div class="chk-dot"></div><div><div class="chk-text">Intel de 10.20.45.113 obtida</div><span class="chk-pts">+50 pts</span></div></div>
+          <div class="chk-item" id="chk-f3-ip2"><div class="chk-dot"></div><div><div class="chk-text">Intel de 185.220.101.45 obtida</div><span class="chk-pts">+50 pts</span></div></div>
+          <div class="chk-item" id="chk-f3-domain"><div class="chk-dot"></div><div><div class="chk-text">Intel de update-cdn185.net obtida</div><span class="chk-pts">+50 pts</span></div></div>
+          <div class="chk-item" id="chk-f3-hash"><div class="chk-dot"></div><div><div class="chk-text">Intel do hash SHA256 obtida</div><span class="chk-pts">+50 pts</span></div></div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+
+  wrap.querySelectorAll('.btn-consultar').forEach(btn=>{
+    btn.addEventListener('click',function(){
+      const k=this.dataset.intel;const d=INTEL_DB[k];
+      const fieldsEl=document.getElementById('enrich-fields-'+k);
+      fieldsEl.querySelectorAll('.ef-val').forEach((el,i)=>{
+        el.textContent=d.fields[i].val;
+        el.className='ef-val filled'+(d.fields[i].cls?' '+d.fields[i].cls:'');
+      });
+      document.getElementById('enrich-card-'+k).classList.add('enriched');
+      this.textContent='✓ Consultado';this.disabled=true;
+      award('f3',d.award,d.pts,d.toastLabel,d.toastMsg);
+    });
+  });
+  scrollTo(wrap);
+}
+
+/* ════════════════════════════════════════
+   RELATÓRIO FINAL — Hunt Report
+   ════════════════════════════════════════ */
+function buildRelatorio(){
+  const wrap=document.getElementById('relatorio-wrap');
+  const iocList=[
+    {id:'ioc-ip1',label:'IP 10.20.45.113'},
+    {id:'ioc-ip2',label:'IP 185.220.101.45'},
+    {id:'ioc-domain',label:'update-cdn185.net'},
+    {id:'ioc-hash',label:'SHA256 9c2d4b6e…'},
+  ];
+  const iocChecks=iocList.map(i=>`
+    <label class="ioc-check-label">
+      <input type="checkbox" id="${i.id}" ${done.f1.has('f1-'+i.id.replace('ioc-',''))?'checked':''}/>${esc(i.label)}
+    </label>`).join('');
+
+  wrap.innerHTML=`
+  <div class="rel-card" id="relatorio-card">
+    <div class="rel-hdr">
+      <span class="rel-badge">HUNT REPORT</span>
+      <span class="rel-title">Relatório de Threat Hunting — APT-FIN7-BR</span>
+    </div>
+    <div class="rel-body">
+      <div class="rel-form" id="hunt-form">
+        <div class="form-group">
+          <label class="form-label">Hipótese Investigada</label>
+          <input type="text" class="form-input" id="hr-hipotese" value="APT-FIN7-BR utilizou 185.220.101.45/update-cdn185.net para comprometer instituições financeiras brasileiras via brute force SSH, implante de backdoor e C2 rotativo." readonly/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">IOCs Confirmados na Rede</label>
+          <div class="form-iocs">${iocChecks}</div>
+        </div>
+        <div class="form-group-row">
+          <div class="form-group">
+            <label class="form-label">Técnicas MITRE Identificadas</label>
+            <input type="text" class="form-input" id="hr-mitre" placeholder="ex: T1110, T1136, T1071, T1048"/>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Sistemas Afetados</label>
+            <input type="text" class="form-input" id="hr-sistemas" placeholder="ex: srv01 (192.168.10.7)"/>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Recomendação Imediata</label>
+          <textarea class="form-textarea" id="hr-rec-imediata" placeholder="Ações de contenção imediata: bloquear IPs, isolar host, revogar credenciais…"></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Recomendação de Longo Prazo</label>
+          <textarea class="form-textarea" id="hr-rec-longo" placeholder="Melhorias estruturais: MFA, EDR, monitoramento de DNS, política de criação de contas…"></textarea>
+        </div>
+      </div>
+      <button class="btn-finalizar" id="btn-finalizar" disabled>🏁 Finalizar Hunt</button>
+      <div class="hunt-done" id="hunt-done">
+        <div class="hunt-doc" id="hunt-doc"></div>
+        <div class="done-banner">
+          <div class="done-icon">🏅</div>
+          <h3 class="done-title">Hunt Report — Operação Caçada Concluída!</h3>
+          <div class="done-score" id="done-score">800 pts</div>
+          <p class="done-msg">Você extraiu os IOCs, confirmou correspondências no SIEM, enriqueceu os alertas e produziu o relatório de hunt. Operação encerrada com sucesso.</p>
+          <a class="done-back" href="https://blueteam.army/courses">&larr; Voltar para o Curso</a>
+        </div>
+      </div>
+    </div>
+  </div>`;
+
+  const fields=['hr-mitre','hr-sistemas','hr-rec-imediata','hr-rec-longo'];
+  function checkForm(){
+    const ok=fields.every(id=>document.getElementById(id)?.value.trim().length>0);
+    document.getElementById('btn-finalizar').disabled=!ok;
+  }
+  fields.forEach(id=>document.getElementById(id)?.addEventListener('input',checkForm));
+
+  document.getElementById('btn-finalizar').addEventListener('click',function(){
+    if(this.disabled)return;
+    const iocChecked=iocList
+      .filter(i=>document.getElementById(i.id)?.checked)
+      .map(i=>i.label).join(', ')||'—';
+    const mitre=document.getElementById('hr-mitre').value;
+    const sistemas=document.getElementById('hr-sistemas').value;
+    const recI=document.getElementById('hr-rec-imediata').value;
+    const recL=document.getElementById('hr-rec-longo').value;
+    const now=new Date().toISOString().replace('T',' ').slice(0,19)+' UTC';
+
+    score.fr=100;
+    document.getElementById('hud-pts').textContent=total();
+
+    document.getElementById('hunt-doc').innerHTML=`
+      <div class="hd-title">HUNT REPORT — OPERAÇÃO CAÇADA</div>
+      <div class="hd-sub">APT-FIN7-BR · CONFIDENCIAL · BTA THREAT HUNTING UNIT</div>
+      <hr class="hd-sep">
+      <div class="hd-row"><span class="hd-key">Hipótese Investigada:</span><span class="hd-val">APT-FIN7-BR / infraestrutura C2 rotativa</span></div>
+      <div class="hd-row"><span class="hd-key">IOCs Confirmados:</span><span class="hd-val">${esc(iocChecked)}</span></div>
+      <div class="hd-row"><span class="hd-key">Técnicas MITRE:</span><span class="hd-val">${esc(mitre)}</span></div>
+      <div class="hd-row"><span class="hd-key">Sistemas Afetados:</span><span class="hd-val">${esc(sistemas)}</span></div>
+      <div class="hd-row"><span class="hd-key">Rec. Imediata:</span><span class="hd-val">${esc(recI)}</span></div>
+      <div class="hd-row"><span class="hd-key">Rec. Longo Prazo:</span><span class="hd-val">${esc(recL)}</span></div>
+      <hr class="hd-sep">
+      <div class="hd-sig">✅ Hunt Report assinado digitalmente · ${now}</div>`;
+
+    document.getElementById('done-score').textContent=total()+' pts';
+    document.getElementById('hunt-done').classList.add('visible');
+    this.style.display='none';
+    setStep(4,'done');
+    setTimeout(()=>document.getElementById('hunt-done').scrollIntoView({behavior:'smooth',block:'start'}),300);
+  });
+
+  scrollTo(wrap);
+}
+
+/* ── Init ── */
+(function init(){
+  document.querySelectorAll('.section-wrap').forEach(sw=>revealSection(sw));
+})();
+
+})();
+</script>
+</body>
+</html>
